@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<navigation xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/nav_graph"
+    app:startDestination="@id/vtuberPCFragment">
+
+    <fragment
+        android:id="@+id/permissions_fragment"
+        android:name="com.amoherom.mizuface.fragment.PermissionsFragment"
+        android:label="PermissionsFragment">
+
+        <action
+            android:id="@+id/action_permissions_fragment_to_vtuberPCFragment"
+            app:destination="@id/vtuberPCFragment" />
+
+    </fragment>
+
+    <fragment
+        android:id="@+id/vtuberPCFragment"
+        android:name="com.amoherom.mizuface.fragment.VtuberPCFragment"
+        android:label="VtuberPCFragment" >
+        <action
+            android:id="@+id/action_vtuberPCFragment_to_permissions_fragment"
+            app:destination="@id/permissions_fragment"
+            app:popUpTo="@id/vtuberPCFragment"
+            app:popUpToInclusive="true" />
+    </fragment>
+</navigation>
