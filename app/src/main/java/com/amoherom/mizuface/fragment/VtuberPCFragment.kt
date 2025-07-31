@@ -174,7 +174,7 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
         try {
             pcSocket = DatagramSocket()
             binding.pcLinkState.setImageResource(R.drawable.link)
-            binding.pcIpAddress.text = getLocalIPAddress() ?: "Unknown IP"
+            binding.phoneIpAddress.text = getLocalIPAddress() ?: "Unknown IP"
             Log.d(TAG, "PC Connection initiated successfully")
         } catch (e: Exception) {
             binding.pcLinkState.setImageResource(R.drawable.errorlink)
