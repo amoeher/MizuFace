@@ -105,6 +105,20 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
         ClosePCConnection()
     }
 
+    private fun getLocalIPAddress(): String? {
+        // This function can be used to get the local IP address of the device
+        // For example, using WifiManager or NetworkInterface
+        // Here we just return a hardcoded IP address for demonstration purposes
+        return try {
+            val address = InetAddress.getLocalHost()
+            address.hostAddress
+        }
+        catch (e: Exception) {
+            Log.e(TAG, "Error getting local IP address", e)
+            null
+        }
+    }
+
     private fun setUpCamera(){
         val cameraProviderFuture = ProcessCameraProvider.getInstance(requireContext())
         cameraProviderFuture.addListener(
@@ -160,6 +174,7 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
         try {
             pcSocket = DatagramSocket()
             binding.pcLinkState.setImageResource(R.drawable.link)
+            binding.pcIpAddress.text = getLocalIPAddress() ?: "Unknown IP"
             Log.d(TAG, "PC Connection initiated successfully")
         } catch (e: Exception) {
             binding.pcLinkState.setImageResource(R.drawable.errorlink)

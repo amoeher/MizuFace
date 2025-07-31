@@ -13,3 +13,5 @@
 .externalNativeBuild
 .cxx
 local.properties
+.idea/discord.xml
+.idea/copilotDiffState.xml
