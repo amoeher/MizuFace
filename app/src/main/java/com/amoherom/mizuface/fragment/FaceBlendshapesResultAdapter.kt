@@ -4,7 +4,9 @@ import android.util.Log
 import android.view.LayoutInflater
 import android.view.ViewGroup
 import androidx.recyclerview.widget.RecyclerView
+import com.amoherom.mizuface.BlenshapeMapper
 import com.amoherom.mizuface.databinding.FaceBlendshapesResultBinding
+import com.amoherom.mizuface.databinding.FragmentVtuberPcBinding
 import com.google.mediapipe.tasks.components.containers.Category
 import com.google.mediapipe.tasks.vision.facelandmarker.FaceLandmarkerResult
 import kotlinx.coroutines.CoroutineScope
@@ -22,7 +24,10 @@ class FaceBlendshapesResultAdapter :
         private const val NO_VALUE = "--"
     }
 
-    private var categories: MutableList<Category?> = MutableList(53) { null }
+    private var categories: MutableList<Category?> = MutableList(52) { null }
+    private var blendshapes: MutableList<Pair<String, Float>> = BlenshapeMapper.blendshapeBundle
+
+
     var PC_IP = "192.168.1.3"
     var PC_PORT = "49983"
 
@@ -30,13 +35,25 @@ class FaceBlendshapesResultAdapter :
     fun updateResults(faceLandmarkerResult: FaceLandmarkerResult? = null) {
         categories = MutableList(53) { null }
         if (faceLandmarkerResult != null && faceLandmarkerResult.faceBlendshapes().isPresent) {
-            val faceBlendshapes = faceLandmarkerResult.faceBlendshapes().get()
-            val sortedCategories = faceBlendshapes[0].sortedByDescending { it.score() }
+            val detectedFaceBlendshapes = faceLandmarkerResult.faceBlendshapes().get()
+            val sortedCategories = detectedFaceBlendshapes[0].sortedByDescending { it.score() }
             val min = kotlin.math.min(sortedCategories.size, categories.size)
             for (i in 0 until min) {
                 categories[i] = sortedCategories[i]
             }
+
+            for (blenshape in categories){
+                val index = blendshapes.indexOfFirst { it.first == blenshape?.categoryName() }
+                if (index != -1) {
+                    blendshapes[index] = Pair(blenshape?.categoryName() ?: "", blenshape?.score() ?: 0f)
+                }
+            }
+
+
         }
+
+
+
     }
 
     override fun onCreateViewHolder(

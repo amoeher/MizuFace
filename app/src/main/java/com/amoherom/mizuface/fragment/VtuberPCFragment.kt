@@ -6,6 +6,9 @@ import android.util.Log
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.EditText
+import android.widget.ProgressBar
+import android.widget.TextView
 import android.widget.Toast
 import androidx.camera.core.AspectRatio
 import androidx.camera.core.Camera
@@ -24,7 +27,6 @@ import com.amoherom.mizuface.FaceLandmarkerHelper
 import com.amoherom.mizuface.MainViewModel
 import com.amoherom.mizuface.R
 import com.amoherom.mizuface.databinding.FragmentVtuberPcBinding
-import com.amoherom.mizuface.fragment.FaceBlendshapesResultAdapter
 import com.google.mediapipe.tasks.vision.core.RunningMode
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -36,14 +38,18 @@ import java.nio.charset.Charset
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import androidx.navigation.findNavController
+import com.amoherom.mizuface.BlendshapeRow
+import com.amoherom.mizuface.BlenshapeMapper
+import com.google.mediapipe.tasks.vision.facelandmarker.FaceLandmarkerResult
+import java.net.NetworkInterface
 
 class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
 
     // This fragment is used to send blendshapes to VSeeFace
     // It can be used to display the blendshapes in a UI or send them over a network
 
-    private var PC_IP = "192.168.1.2"
-    private var PC_PORT = "50509" // VSeeFace default port Vnyan 50509
+    private var PC_IP = "192.168.1.3"
+    private var PC_PORT = "50509" // VSeeFace 50509  Vnyan 50509
 
 
     companion object {
@@ -70,6 +76,8 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
     private lateinit var backgroundExecutor: ExecutorService
 
     private var pcSocket: DatagramSocket? = null
+
+    private lateinit var blendshapeRows: List<BlendshapeRow>
 
     override fun onResume() {
         super.onResume()
@@ -105,18 +113,35 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
         ClosePCConnection()
     }
 
+    // Function to get the local IP address of the device
     private fun getLocalIPAddress(): String? {
-        // This function can be used to get the local IP address of the device
-        // For example, using WifiManager or NetworkInterface
-        // Here we just return a hardcoded IP address for demonstration purposes
-        return try {
-            val address = InetAddress.getLocalHost()
-            address.hostAddress
+        try{
+            val en = NetworkInterface.getNetworkInterfaces()
+            while (en.hasMoreElements()) {
+                val intf = en.nextElement()
+                val enumIpAddr = intf.inetAddresses
+                while (enumIpAddr.hasMoreElements()) {
+                    val inetAddress = enumIpAddr.nextElement()
+                    if (!inetAddress.isLoopbackAddress && inetAddress.hostAddress.indexOf(':') < 0) {
+                        return ipToString(inetAddress.hashCode())
+                    }
+                }
+            }
+        } catch (ex: Exception) {
+            Log.e(TAG, "Error getting local IP address", ex)
+            return null
         }
-        catch (e: Exception) {
-            Log.e(TAG, "Error getting local IP address", e)
-            null
-        }
+        return null
+    }
+
+    private fun ipToString(ip: Int): String {
+        return String.format(
+            "%d.%d.%d.%d",
+            (ip shr 24 and 0xFF),
+            (ip shr 16 and 0xFF),
+            (ip shr 8 and 0xFF),
+            (ip and 0xFF),
+        )
     }
 
     private fun setUpCamera(){
@@ -163,6 +188,33 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
             )
         }
 
+        val container = binding.blendshapeList
+        val inflater = LayoutInflater.from(requireContext())
+        val blendShapesList = BlenshapeMapper.blendshapeBundle.map { it.first }
+        val blendshapeRowsList = mutableListOf<BlendshapeRow>()
+
+        for (name in blendShapesList) {
+            val itemView = inflater.inflate(R.layout.blendshape_row, container, false)
+
+            // 🔹 Always find children from itemView, not binding.root
+            val blendshapeName = itemView.findViewById<TextView>(R.id.blendshapeName)
+            val progressBar = itemView.findViewById<ProgressBar>(R.id.blendshapeProgress)
+            val editText = itemView.findViewById<EditText>(R.id.blendshapeValue)
+
+            // Set initial values
+            blendshapeName.text = name
+            progressBar.progress = 0
+            editText.setText("1")
+
+            // Store in list for later updates
+            blendshapeRowsList.add(BlendshapeRow(name, progressBar, editText))
+
+            container.addView(itemView)
+        }
+
+        // Store the list for use in onResults
+        blendshapeRows = blendshapeRowsList
+
         // Initialize the PC connection
         InitiatePCConnection()
     }
@@ -174,7 +226,8 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
         try {
             pcSocket = DatagramSocket()
             binding.pcLinkState.setImageResource(R.drawable.link)
-            binding.phoneIpAddress.text = getLocalIPAddress() ?: "Unknown IP"
+            val ipState = "${getLocalIPAddress()?: "Unknown IP"} : $PC_PORT"
+            binding.phoneIpAddress.text = ipState
             Log.d(TAG, "PC Connection initiated successfully")
         } catch (e: Exception) {
             binding.pcLinkState.setImageResource(R.drawable.errorlink)
@@ -361,10 +414,8 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
     override fun onResults(resultBundle: FaceLandmarkerHelper.ResultBundle) {
         activity?.runOnUiThread {
             if (_binding != null){
-                if(binding.recyclerViewResults.scrollState != RecyclerView.SCROLL_STATE_DRAGGING) {
-                    faceBlendshapesResultAdapter.updateResults(resultBundle.result)
-                    faceBlendshapesResultAdapter.notifyDataSetChanged()
-                }
+                faceBlendshapesResultAdapter.updateResults(resultBundle.result)
+                faceBlendshapesResultAdapter.notifyDataSetChanged()
 
                 var blendhsapes = resultBundle.result?.faceBlendshapes()
                 var faceLandmarks = resultBundle.result?.faceLandmarks()
@@ -417,11 +468,11 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
                 val dyYaw = (rightEyeLandmarkIndex?.z() ?: 0f) - (leftEyeLandmarkIndex?.z() ?: 0f)
                 val yaw = Math.atan2(dxYaw.toDouble(), dyYaw.toDouble()).toFloat()
 
-// Pitch (up/down) → difference between nose and eyes
+                // Pitch (up/down) → difference between nose and eyes
                 val eyeY = ((leftEyeLandmarkIndex?.y() ?: 0f) + (rightEyeLandmarkIndex?.y() ?: 0f)) / 2
                 val pitch = Math.atan2((noseLandmarkindex?.y() ?: 0f) - eyeY.toDouble(), 1.0).toFloat()
 
-// Roll stays same (tilt head side)
+                // Roll stays same (tilt head side)
                 val roll = Math.atan2(
                     ((rightEyeLandmarkIndex?.y() ?: 0f) - (leftEyeLandmarkIndex?.y() ?: 0f)).toDouble(),
                     ((rightEyeLandmarkIndex?.x() ?: 0f) - (leftEyeLandmarkIndex?.x() ?: 0f)).toDouble()
@@ -429,7 +480,6 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
 
 
 
-//                var faceRotation = Triple((pitch * 100 / Math.PI).toFloat(), (yaw ).toFloat(), (roll * 100  / Math.PI).toFloat())
                 var faceRotation = Triple(
                     50f - (yaw.toFloat() * 90 / Math.PI.toFloat()),
                     pitch.toFloat() * 1000f / Math.PI.toFloat(),
@@ -464,6 +514,31 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
                     val blendshapesMap = blendhsapes.get()[0].associate {
                         it.categoryName() to it.score()
                     }
+
+                    // Update the UI elements for each blendshape
+                    for (blendshapeRow in blendshapeRows) {
+                        val blendshapeName = blendshapeRow.blendshapeName
+                        val score = blendshapesMap[blendshapeName] ?: 0f
+
+                        // Update progress bar (convert score from 0-1 to 0-100)
+                        val progressValue = (score * 100).toInt().coerceIn(0, 100)
+                        blendshapeRow.blendshapeProgress.progress = progressValue
+
+                        // Get the multiplier from the EditText (default to 1 if empty or invalid)
+                        val multiplierText = blendshapeRow.blendshapeValue.text.toString()
+                        val multiplier = try {
+                            multiplierText.toFloat()
+                        } catch (e: NumberFormatException) {
+                            1f
+                        }
+
+                        // Use the multiplier when sending to PC (optional)
+                        blendshapesMap[blendshapeName]?.let {
+                            // You could modify the value being sent to PC here if needed
+                        }
+                    }
+
+                    // Update the progress bars and text fields with the latest blendshape values
                     sendBlendshapesToPC(blendshapesMap, faceRotation, facePosition, eyeLeft, eyeRight)
                 } else {
                     Log.d(TAG, "No blendshapes detected")
