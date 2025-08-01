@@ -88,7 +88,57 @@
                 <androidx.recyclerview.widget.RecyclerView
                     android:id="@+id/recyclerViewResults"
                     android:layout_width="match_parent"
-                    android:layout_height="match_parent" />
+                    android:layout_height="match_parent"
+                    android:visibility="gone" />
+
+                <ScrollView
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent">
+
+                    <LinearLayout
+                        android:id="@+id/blendshapeList"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        >
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:orientation="horizontal"
+                            android:gravity="center">
+
+                            <TextView
+                                android:id="@+id/textView"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_marginEnd="15dp"
+                                android:maxWidth="30sp"
+                                android:layout_weight="1"
+                                android:text="mouthShrugUpper" />
+
+                            <ProgressBar
+                                android:id="@+id/progressBar"
+                                style="?android:attr/progressBarStyleHorizontal"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:layout_marginEnd="15dp"/>
+
+                            <EditText
+                                android:id="@+id/editTextNumber"
+                                android:layout_height="wrap_content"
+                                android:layout_width="wrap_content"
+                                android:width="20dp"
+                                android:layout_weight="0"
+                                android:minEms="2"
+                                android:ems="2"
+                                android:maxEms="2"
+                                android:inputType="number"
+                                android:text="1" />
+                        </LinearLayout>
+                    </LinearLayout>
+                </ScrollView>
             </LinearLayout>
 
 
@@ -119,7 +169,7 @@
             app:srcCompat="@drawable/unlink" />
 
         <TextView
-            android:id="@+id/textView"
+            android:id="@+id/phoneIpAddress"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_weight="1"
