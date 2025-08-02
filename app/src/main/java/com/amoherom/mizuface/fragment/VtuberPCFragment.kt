@@ -48,8 +48,8 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
     // This fragment is used to send blendshapes to VSeeFace
     // It can be used to display the blendshapes in a UI or send them over a network
 
-    private var PC_IP = "192.168.1.3"
-    private var PC_PORT = "50509" // VSeeFace 50509  Vnyan 50509
+    private var PC_IP = "192.168.1.2"
+    private var PC_PORT = "50506" // VSeeFace 50509  Vnyan 50509
 
 
     companion object {
@@ -158,11 +158,6 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        with(binding.recyclerViewResults){
-            layoutManager = LinearLayoutManager(requireContext())
-            adapter = faceBlendshapesResultAdapter
-        }
-
         backgroundExecutor = Executors.newSingleThreadExecutor()
 
         // Check permissions before setting up camera
@@ -215,7 +210,44 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
         // Store the list for use in onResults
         blendshapeRows = blendshapeRowsList
 
-        // Initialize the PC connection
+        val ipEditText = binding.phoneIpAddress
+        ipEditText.setOnClickListener {
+            ipEditText.isFocusableInTouchMode = true
+            ipEditText.isFocusable = true
+            ipEditText.isCursorVisible = true
+            ipEditText.background = ContextCompat.getDrawable(requireContext(), android.R.drawable.edit_text)
+            ipEditText.requestFocus()
+        }
+
+        ipEditText.setOnClickListener {
+            val editText = EditText(requireContext())
+            editText.setText("$PC_IP:$PC_PORT")
+            editText.setSelection(editText.text.length)
+
+            val dialog = androidx.appcompat.app.AlertDialog.Builder(requireContext())
+                .setTitle("Edit IP Address")
+                .setView(editText)
+                .setPositiveButton("OK") { _, _ ->
+                    val text = editText.text.toString()
+                    val ipPortRegex = Regex("""^(\d{1,3}(\.\d{1,3}){3})(\s*:\s*\d{1,5})?$""")
+                    if (!ipPortRegex.matches(text.trim())) {
+                        Toast.makeText(requireContext(), "Invalid IP address format", Toast.LENGTH_SHORT).show()
+                        return@setPositiveButton
+                    }
+                    ipEditText.setText(text)
+                    val ip = text.split(":").firstOrNull()?.trim()
+                    val port = text.split(":").getOrNull(1)?.trim()?.toIntOrNull() ?: PC_PORT.toInt()
+                    if (!ip.isNullOrEmpty()) {
+                        PC_IP = ip
+                        PC_PORT = port.toString()
+                    }
+                    InitiatePCConnection()
+                }
+                .setNegativeButton("Cancel", null)
+                .create()
+            dialog.show()
+        }
+
         InitiatePCConnection()
     }
 
@@ -223,11 +255,15 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
         // This function can be used to initiate a connection to the PC
         // For example, creating a socket connection or HTTP request
         Log.d(TAG, "Initiating connection to PC at $PC_IP:$PC_PORT")
+
+        // Close any existing connection before creating a new one
+        ClosePCConnection()
+
         try {
             pcSocket = DatagramSocket()
             binding.pcLinkState.setImageResource(R.drawable.link)
             val ipState = "${getLocalIPAddress()?: "Unknown IP"} : $PC_PORT"
-            binding.phoneIpAddress.text = ipState
+            binding.phoneIpAddress.setText(ipState)
             Log.d(TAG, "PC Connection initiated successfully")
         } catch (e: Exception) {
             binding.pcLinkState.setImageResource(R.drawable.errorlink)
@@ -545,19 +581,7 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
                 }
 
 
-                if (faceLandmarks != null && !(faceLandmarks.isEmpty())) {
-                    for (noemalizedFaceLandmark in faceLandmarks) {
-                        var i = 0
-//                        for (landmark in noemalizedFaceLandmark) {
-//                            //Log.d(TAG, "Landmark ${landmark.toString()}: ${landmark.x()}, ${landmark.y()}, ${landmark.z()}")
-//                            Log.d(TAG, "Landmark [${i}] : ${landmark.toString()}}")
-//                            i++
-//                        }
-                        //                       Log.d("Face LandMarker Landmark0", "Landmark [0] : ${noemalizedFaceLandmark[0].toString()}")
-                    }
-                    //Log.d("Face LandMarker Landmark0", "Landmark [0] : ${faceLandmarks[0][0].toString()}")
-
-                } else {
+                if (faceLandmarks.isNullOrEmpty()) {
                     Log.d(TAG, "No face landmarks detected")
                 }
 
