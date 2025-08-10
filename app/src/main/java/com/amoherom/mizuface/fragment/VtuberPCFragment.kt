@@ -49,7 +49,7 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
     // It can be used to display the blendshapes in a UI or send them over a network
 
     private var PC_IP = "192.168.1.2"
-    private var PC_PORT = "50506" // VSeeFace 50509  Vnyan 50509
+    private var PC_PORT = "50509" // VSeeFace 50509  Vnyan 50509
 
 
     companion object {
@@ -521,16 +521,18 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
                     pitch.toFloat() * 1000f / Math.PI.toFloat(),
                     -roll.toFloat() * 100f / Math.PI.toFloat(),
                 )
-                var facePosition = Triple(0.0f, 0.0f, 0.0f)
-                var eyeLeft = Triple(0.5f, 0.5f, 0.5f)
-                var eyeRight = Triple(0.5f, 0.5f, 0.5f)
+
+
+                val cameraFOVcm = 20f // This is a placeholder, adjust based on your camera's FOV
+                val facePosX = (0.5f - (noseLandmarkindex?.x()?.toFloat() ?: 0f)) * cameraFOVcm
+                val facePosY = (0.5f - ( noseLandmarkindex?.y()?.toFloat() ?: 0f)) * cameraFOVcm
+                val facePosZ = (0.5f - ( noseLandmarkindex?.z()?.toFloat() ?: 0f)) * cameraFOVcm
+
+                var facePosition = Triple(facePosX, facePosY, facePosZ)
+                var eyeLeft = Triple(eyeLX, eyeLY, 0.0f)
+                var eyeRight = Triple(eyeRX, eyeRY, 0.0f)
 
                 if (faceLandmarks != null && faceLandmarks.isNotEmpty()) {
-                    facePosition = Triple(
-                        0f,
-                        0f,
-                        0f
-                    )
 
                     eyeLeft = Triple(
                         eyeLY * 80,
