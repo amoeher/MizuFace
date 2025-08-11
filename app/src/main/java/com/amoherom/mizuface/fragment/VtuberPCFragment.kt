@@ -42,6 +42,11 @@ import com.amoherom.mizuface.BlendshapeRow
 import com.amoherom.mizuface.BlenshapeMapper
 import com.google.mediapipe.tasks.vision.facelandmarker.FaceLandmarkerResult
 import java.net.NetworkInterface
+import android.hardware.camera2.CameraCharacteristics
+import com.amoherom.mizuface.CameraFov
+import kotlin.math.abs
+import kotlin.math.atan
+import kotlin.math.tan
 
 class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
 
@@ -49,8 +54,17 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
     // It can be used to display the blendshapes in a UI or send them over a network
 
     private var PC_IP = "192.168.1.2"
-    private var PC_PORT = "50506" // VSeeFace 50509  Vnyan 50509
+    private var PC_PORT = "50509" // VSeeFace 50509  Vnyan 50509
 
+    private var EYE_WEIGHT = 80 // This is the weight for eye tracking, can be adjusted
+    private var HEAD_PICH_WEIGHT = 1000f / Math.PI.toFloat() // This is the weight for head pitch tracking, can be adjusted
+    private var HEAD_YAW_WEIGHT = 90 / Math.PI.toFloat() // This is the weight for head yaw tracking, can be adjusted
+    private var HEAD_ROLL_WEIGHT = 100f / Math.PI.toFloat() // This is the weight for head roll tracking, can be adjusted
+    private var CAMERA_FOV_CM = 20f // This is the camera field of view in centimeters, can be adjusted
+
+    private var fov: CameraFov.Fov? = null
+    private var ipdCm = 6.3f // Interpupillary distance in centimeters, can be adjusted
+    private var distanceCmFiltered = 60.0 // Distance from camera to face in centimeters, Initial value, Will be adjusted
 
     companion object {
         private const val TAG = "Face Landmarker"
@@ -149,9 +163,34 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
         cameraProviderFuture.addListener(
             {
                 cameraProvider = cameraProviderFuture.get()
+                val facing = if (cameraFacing == CameraSelector.LENS_FACING_FRONT) {
+                    CameraCharacteristics.LENS_FACING_FRONT
+                } else {
+                    CameraCharacteristics.LENS_FACING_BACK
+                }
+                fov = CameraFov.getFovRadians(requireContext(), facing)
                 bindCameraUseCases()
             }, ContextCompat.getMainExecutor(requireContext())
         )
+    }
+
+    private fun angleFromNormX(x: Float, hFov:Double): Double {
+        // x in [0,1] -> ray angle from center
+        return atan(((2.0 * x) - 1.0) * tan(hFov / 2.0))
+    }
+
+    private fun estimateDistanceFromEyes(leftX: Float, rightX: Float): Double {
+        val f = fov ?: return distanceCmFiltered
+        val mirror = cameraFacing == CameraSelector.LENS_FACING_FRONT
+        val lx = if (mirror) 1.0f - leftX else leftX
+        val rx = if (mirror) 1.0f - rightX else rightX
+
+        val aL = angleFromNormX(lx, f.hRad)
+        val aR = angleFromNormX(rx, f.hRad)
+        val alpha = abs(aR - aL).coerceAtLeast(1e-3) // Avoid Devide by 0
+        val d = ipdCm / (2.0 * tan(alpha / 2.0)) // Distance in cm
+        distanceCmFiltered = 0.9 * distanceCmFiltered + 0.1 * d.toFloat() // Simple low-pass filter
+        return distanceCmFiltered
     }
 
     @SuppressLint("MissingPermission")
@@ -517,30 +556,65 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
 
 
                 var faceRotation = Triple(
-                    50f - (yaw.toFloat() * 90 / Math.PI.toFloat()),
-                    pitch.toFloat() * 1000f / Math.PI.toFloat(),
-                    -roll.toFloat() * 100f / Math.PI.toFloat(),
+                    50f - (yaw.toFloat() * HEAD_YAW_WEIGHT),
+                    pitch.toFloat() * HEAD_PICH_WEIGHT,
+                    -roll.toFloat() * HEAD_ROLL_WEIGHT,
                 )
-                var facePosition = Triple(0.0f, 0.0f, 0.0f)
-                var eyeLeft = Triple(0.5f, 0.5f, 0.5f)
-                var eyeRight = Triple(0.5f, 0.5f, 0.5f)
 
-                if (faceLandmarks != null && faceLandmarks.isNotEmpty()) {
-                    facePosition = Triple(
-                        0f,
-                        0f,
-                        0f
+                val facePosX = (0.5f - (noseLandmarkindex?.x()?.toFloat() ?: 0f)) * CAMERA_FOV_CM
+                val facePosY = (0.5f - ( noseLandmarkindex?.y()?.toFloat() ?: 0f)) * CAMERA_FOV_CM
+                val facePosZ = (0.5f - ( noseLandmarkindex?.z()?.toFloat() ?: 0f)) * CAMERA_FOV_CM
+
+                val f = fov
+
+                var facePosition = Triple(0f, 0f, 0f)
+
+                if (f != null && leftEyeLandmarkIndex != null && rightIrisLandmarkIndex != null && noseLandmarkindex != null){
+                    val distanceCm = estimateDistanceFromEyes(
+                        leftIrisx,
+                        rightIrisx
                     )
 
+                    val wCm = CameraFov.widthAtDistance(distanceCm, f)
+                    val hCm = CameraFov.heightAtDistance(distanceCm, f)
+
+                    val nx = noseLandmarkindex.x().toFloat()
+                    val ny = noseLandmarkindex.y().toFloat()
+                    val nxWorld = nx
+
+                    val facePosX = ((0.5f - nxWorld) * wCm).toFloat()
+                    val facePosY = ((0.5f - ny) * hCm).toFloat()
+                    val facePosZ = distanceCm.toFloat() // Use the estimated distance as Z position
+
+                    facePosition = Triple(
+                        facePosX,
+                        facePosY,
+                        facePosZ
+                    )
+                }
+                else{
+                    // If we don't have enough data, use the previous position
+                    Log.d(TAG, "Not enough data to calculate face position, using default values")
+                    val facePosX = (0.5f - (noseLandmarkindex?.x()?.toFloat() ?: 0f)) * CAMERA_FOV_CM
+                    val facePosY = (0.5f - (noseLandmarkindex?.y()?.toFloat() ?: 0f)) * CAMERA_FOV_CM
+                    val facePosZ = CAMERA_FOV_CM // meh
+                    facePosition = Triple(facePosX, facePosY, facePosZ)
+                }
+
+                var eyeLeft = Triple(eyeLX, eyeLY, 0.0f)
+                var eyeRight = Triple(eyeRX, eyeRY, 0.0f)
+
+                if (faceLandmarks != null && faceLandmarks.isNotEmpty()) {
+
                     eyeLeft = Triple(
-                        eyeLY * 80,
-                        -eyeLX * 80,
+                        eyeLY * EYE_WEIGHT,
+                        -eyeLX * EYE_WEIGHT,
                         0.0f
                     )
 
                     eyeRight = Triple(
-                        eyeRY * 80,
-                        eyeRX * 80,
+                        eyeRY * EYE_WEIGHT,
+                        eyeRX * EYE_WEIGHT,
                         0.0f
                     )
 
