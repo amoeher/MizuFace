@@ -43,6 +43,10 @@ import com.amoherom.mizuface.BlenshapeMapper
 import com.google.mediapipe.tasks.vision.facelandmarker.FaceLandmarkerResult
 import java.net.NetworkInterface
 import android.hardware.camera2.CameraCharacteristics
+import android.text.InputType
+import android.view.inputmethod.EditorInfo
+import android.view.inputmethod.InputMethodManager
+import androidx.core.content.ContextCompat.getSystemService
 import com.amoherom.mizuface.CameraFov
 import kotlin.math.abs
 import kotlin.math.atan
@@ -249,6 +253,36 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
         // Store the list for use in onResults
         blendshapeRows = blendshapeRowsList
 
+
+        for (row in blendshapeRows) {
+            row.blendshapeWeight.inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
+
+            // Show soft keyboard when the EditText is clicked force
+            row.blendshapeWeight.setOnClickListener {
+                val editTextd = EditText(requireContext())
+                editTextd.setText("${row.blendshapeWeight.text}")
+                editTextd.setSelection(editTextd.text.length)
+
+                val dialog = androidx.appcompat.app.AlertDialog.Builder(requireContext())
+                    .setTitle("Edit IP Address")
+                    .setView(editTextd)
+                    .setPositiveButton("OK") { _, _ ->
+                        val text = editTextd.text.toString()
+                        if (editTextd.text.isNullOrEmpty() || text.toFloatOrNull() == null) {
+                            Toast.makeText(requireContext(), "Blendshape Wight Not Valid", Toast.LENGTH_SHORT).show()
+                            return@setPositiveButton
+                        }
+                        row.blendshapeWeight.setText(text)
+
+                        InitiatePCConnection()
+                    }
+                    .setNegativeButton("Cancel", null)
+                    .create()
+                dialog.show()
+            }
+        }
+
+
         val ipEditText = binding.phoneIpAddress
         ipEditText.setOnClickListener {
             ipEditText.isFocusableInTouchMode = true
@@ -285,6 +319,16 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
                 .setNegativeButton("Cancel", null)
                 .create()
             dialog.show()
+        }
+
+        // Switch Camera
+        binding.changeCamera.setOnClickListener{
+            cameraFacing = if (cameraFacing == CameraSelector.LENS_FACING_FRONT) {
+                CameraSelector.LENS_FACING_BACK
+            } else {
+                CameraSelector.LENS_FACING_FRONT
+            }
+            setUpCamera()
         }
 
         InitiatePCConnection()
@@ -467,12 +511,6 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
         }
     }
 
-    fun toAvatarEyeCoords(x: Float, y: Float): Triple<Float, Float, Float> {
-        val scaledX = (x - 0.5f) * 40f // center and scale
-        val scaledY = (0.5f - y) * 50f // flip Y and scale
-        return Triple(scaledX, scaledY, 0f)
-    }
-
     fun calcEyeOffsetXY(iris: com.google.mediapipe.tasks.components.containers.NormalizedLandmark?,
                         left: com.google.mediapipe.tasks.components.containers.NormalizedLandmark?,
                         right: com.google.mediapipe.tasks.components.containers.NormalizedLandmark?,
@@ -561,9 +599,9 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
                     -roll.toFloat() * HEAD_ROLL_WEIGHT,
                 )
 
-                val facePosX = (0.5f - (noseLandmarkindex?.x()?.toFloat() ?: 0f)) * CAMERA_FOV_CM
-                val facePosY = (0.5f - ( noseLandmarkindex?.y()?.toFloat() ?: 0f)) * CAMERA_FOV_CM
-                val facePosZ = (0.5f - ( noseLandmarkindex?.z()?.toFloat() ?: 0f)) * CAMERA_FOV_CM
+                var facePosX = (0.5f - (noseLandmarkindex?.x()?.toFloat() ?: 0f)) * CAMERA_FOV_CM
+                var facePosY = (0.5f - ( noseLandmarkindex?.y()?.toFloat() ?: 0f)) * CAMERA_FOV_CM
+                var facePosZ = (0.5f - ( noseLandmarkindex?.z()?.toFloat() ?: 0f)) * CAMERA_FOV_CM
 
                 val f = fov
 
@@ -582,9 +620,9 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
                     val ny = noseLandmarkindex.y().toFloat()
                     val nxWorld = nx
 
-                    val facePosX = ((0.5f - nxWorld) * wCm).toFloat()
-                    val facePosY = ((0.5f - ny) * hCm).toFloat()
-                    val facePosZ = distanceCm.toFloat() // Use the estimated distance as Z position
+                    facePosX = ((0.5f - nxWorld) * wCm).toFloat()
+                    facePosY = ((0.5f - ny) * hCm).toFloat()
+                    facePosZ = distanceCm.toFloat() // Use the estimated distance as Z position
 
                     facePosition = Triple(
                         facePosX,
@@ -595,9 +633,9 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
                 else{
                     // If we don't have enough data, use the previous position
                     Log.d(TAG, "Not enough data to calculate face position, using default values")
-                    val facePosX = (0.5f - (noseLandmarkindex?.x()?.toFloat() ?: 0f)) * CAMERA_FOV_CM
-                    val facePosY = (0.5f - (noseLandmarkindex?.y()?.toFloat() ?: 0f)) * CAMERA_FOV_CM
-                    val facePosZ = CAMERA_FOV_CM // meh
+                    facePosX = (0.5f - (noseLandmarkindex?.x()?.toFloat() ?: 0f)) * CAMERA_FOV_CM
+                    facePosY = (0.5f - (noseLandmarkindex?.y()?.toFloat() ?: 0f)) * CAMERA_FOV_CM
+                    facePosZ = CAMERA_FOV_CM // meh
                     facePosition = Triple(facePosX, facePosY, facePosZ)
                 }
 
@@ -621,9 +659,9 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
                 }
 
                 if (blendhsapes != null && blendhsapes.isPresent) {
-                    val blendshapesMap = blendhsapes.get()[0].associate {
+                    var blendshapesMap = blendhsapes.get()[0].associate {
                         it.categoryName() to it.score()
-                    }
+                    }.toMutableMap()
 
                     // Update the UI elements for each blendshape
                     for (blendshapeRow in blendshapeRows) {
@@ -632,19 +670,21 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
 
                         // Update progress bar (convert score from 0-1 to 0-100)
                         val progressValue = (score * 100).toInt().coerceIn(0, 100)
+                        blendshapeRow.blendshapeValue = score
                         blendshapeRow.blendshapeProgress.progress = progressValue
 
                         // Get the multiplier from the EditText (default to 1 if empty or invalid)
-                        val multiplierText = blendshapeRow.blendshapeValue.text.toString()
+                        val multiplierText = blendshapeRow.blendshapeWeight.text.toString()
                         val multiplier = try {
                             multiplierText.toFloat()
                         } catch (e: NumberFormatException) {
                             1f
                         }
 
-                        // Use the multiplier when sending to PC (optional)
+                        // Use the multiplier when sending to PC
                         blendshapesMap[blendshapeName]?.let {
-                            // You could modify the value being sent to PC here if needed
+                            // Modify the value being sent to PC
+                            blendshapesMap[blendshapeName] = it * multiplier
                         }
                     }
 

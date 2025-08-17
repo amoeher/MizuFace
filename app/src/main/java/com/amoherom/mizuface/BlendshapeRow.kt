@@ -6,5 +6,6 @@ import android.widget.ProgressBar
 data class BlendshapeRow(
     val blendshapeName: String,
     val blendshapeProgress: ProgressBar,
-    val blendshapeValue: EditText
+    var blendshapeWeight: EditText,
+    var blendshapeValue: Float = 0.0f
 )

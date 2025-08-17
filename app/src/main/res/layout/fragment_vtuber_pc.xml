@@ -31,10 +31,11 @@
         <FrameLayout
             android:id="@+id/camera_preview"
             android:layout_width="match_parent"
-            android:layout_height="227dp"
+            android:layout_height="230dp"
             android:layout_marginStart="15dp"
             android:layout_marginTop="15dp"
-            android:layout_marginEnd="15dp">
+            android:layout_marginEnd="15dp"
+            android:background="@drawable/widget_border">
 
             <androidx.camera.view.PreviewView
                 android:id="@+id/view_finder"
@@ -43,7 +44,9 @@
                 android:layout_marginStart="7dp"
                 android:layout_marginTop="7dp"
                 android:layout_marginEnd="7dp"
-                android:layout_marginBottom="7dp" />
+                android:layout_marginBottom="7dp">
+
+            </androidx.camera.view.PreviewView>
 
             <View
                 android:layout_width="match_parent"
@@ -51,6 +54,44 @@
                 android:background="@drawable/widget_border"
                 android:clickable="false"
                 android:focusable="false" />
+
+            <ImageView
+                android:id="@+id/imageView"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:layout_marginHorizontal="8dp"
+                android:layout_marginVertical="7dp"
+                app:srcCompat="@drawable/idlerec" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:orientation="horizontal"
+                android:padding="10dp">
+
+                <ImageButton
+                    android:id="@+id/changeCamera"
+                    android:layout_width="50dp"
+                    android:layout_height="50dp"
+                    android:background="@android:color/transparent"
+                    android:contentDescription="Change Camera"
+                    app:srcCompat="@android:drawable/ic_popup_sync" />
+
+                <Space
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1" />
+
+                <ImageButton
+                    android:id="@+id/hidePreview"
+                    android:layout_width="50dp"
+                    android:layout_height="50dp"
+                    android:layout_weight="0"
+                    android:background="@android:color/transparent"
+                    android:contentDescription="Hide the Camera Preview"
+                    app:srcCompat="@android:drawable/ic_menu_view" />
+
+            </LinearLayout>
 
         </FrameLayout>
 
@@ -94,7 +135,11 @@
                         android:id="@+id/blendshapeList"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:orientation="vertical">
+                        android:orientation="vertical"
+                        android:divider="@android:color/transparent"
+                        android:dividerHeight="10dp"
+                        android:showDividers="middle"
+                        >
                     </LinearLayout>
                 </ScrollView>
             </LinearLayout>
@@ -141,14 +186,14 @@
 
         <ImageButton
             android:id="@+id/imageButton"
-            android:layout_width="wrap_content"
+            android:layout_width="50dp"
             android:layout_height="match_parent"
             android:layout_marginEnd="0dp"
-            android:minWidth="40dp"
+            android:background="@android:color/transparent"
 
             android:contentDescription="retry button"
+            android:minWidth="40dp"
             app:layout_constraintEnd_toEndOf="parent"
-            android:background="@android:color/transparent"
             app:srcCompat="@drawable/refreshalt" />
 
 
