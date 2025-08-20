@@ -25,7 +25,7 @@ It connects with software like **VSeeFace** and **VNyan**, letting you stream yo
 
 ## 🛠️ Tech
 - Built with **Kotlin/Android**.  
-- Uses standard camera APIs for facial landmark tracking.  
+- Uses mediapipe for facial landmark tracking.  
 
 ## 📌 Roadmap
 - [ ] Add more detailed calibration.  
