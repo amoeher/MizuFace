@@ -45,4 +45,4 @@ I may update this Privacy Policy from time to time. Updates will be reflected he
 If you have any questions about this Privacy Policy, please contact me:
 
 **Amoeher**  
-📧 [amoeher@gmai.com]  
+📧 [amoeher@gmail.com]  
