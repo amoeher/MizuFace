@@ -21,8 +21,6 @@ import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
 import androidx.navigation.Navigation
-import androidx.recyclerview.widget.LinearLayoutManager
-import androidx.recyclerview.widget.RecyclerView
 import com.amoherom.mizuface.FaceLandmarkerHelper
 import com.amoherom.mizuface.MainViewModel
 import com.amoherom.mizuface.R
@@ -40,17 +38,16 @@ import java.util.concurrent.Executors
 import androidx.navigation.findNavController
 import com.amoherom.mizuface.BlendshapeRow
 import com.amoherom.mizuface.BlenshapeMapper
-import com.google.mediapipe.tasks.vision.facelandmarker.FaceLandmarkerResult
 import java.net.NetworkInterface
 import android.hardware.camera2.CameraCharacteristics
 import android.text.InputType
-import android.view.inputmethod.EditorInfo
-import android.view.inputmethod.InputMethodManager
-import androidx.core.content.ContextCompat.getSystemService
 import com.amoherom.mizuface.CameraFov
 import kotlin.math.abs
 import kotlin.math.atan
 import kotlin.math.tan
+import androidx.core.view.isVisible
+import com.amoherom.mizuface.UtilMiz.Companion.LogD
+import com.amoherom.mizuface.UtilMiz.Companion.LogE
 
 class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
 
@@ -146,7 +143,7 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
                 }
             }
         } catch (ex: Exception) {
-            Log.e(TAG, "Error getting local IP address", ex)
+            LogE(TAG, "Error getting local IP address", ex)
             return null
         }
         return null
@@ -264,7 +261,7 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
                 editTextd.setSelection(editTextd.text.length)
 
                 val dialog = androidx.appcompat.app.AlertDialog.Builder(requireContext())
-                    .setTitle("Edit IP Address")
+                    .setTitle("Edit Blendshape Weight")
                     .setView(editTextd)
                     .setPositiveButton("OK") { _, _ ->
                         val text = editTextd.text.toString()
@@ -272,6 +269,7 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
                             Toast.makeText(requireContext(), "Blendshape Wight Not Valid", Toast.LENGTH_SHORT).show()
                             return@setPositiveButton
                         }
+
                         row.blendshapeWeight.setText(text)
 
                         InitiatePCConnection()
@@ -331,13 +329,23 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
             setUpCamera()
         }
 
+        binding.hidePreview.setOnClickListener{
+            if ( binding.cameraCover.isVisible ){
+                binding.cameraCover.visibility = View.GONE
+            }
+            else {
+                binding.cameraCover.visibility = View.VISIBLE
+            }
+
+        }
+
         InitiatePCConnection()
     }
 
     private fun InitiatePCConnection() {
         // This function can be used to initiate a connection to the PC
         // For example, creating a socket connection or HTTP request
-        Log.d(TAG, "Initiating connection to PC at $PC_IP:$PC_PORT")
+        LogD(TAG, "Initiating connection to PC at $PC_IP:$PC_PORT")
 
         // Close any existing connection before creating a new one
         ClosePCConnection()
@@ -347,23 +355,23 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
             binding.pcLinkState.setImageResource(R.drawable.link)
             val ipState = "${getLocalIPAddress()?: "Unknown IP"} : $PC_PORT"
             binding.phoneIpAddress.setText(ipState)
-            Log.d(TAG, "PC Connection initiated successfully")
+            LogD(TAG, "PC Connection initiated successfully")
         } catch (e: Exception) {
             binding.pcLinkState.setImageResource(R.drawable.errorlink)
-            Log.e(TAG, "Error initiating PC connection", e)
+            LogE(TAG, "Error initiating PC connection", e)
         }
     }
 
     private fun ClosePCConnection(){
         // This function can be used to close the connection to the PC
         // For example, closing a socket connection or HTTP request
-        Log.d(TAG, "Closing connection to PC at $PC_IP:$PC_PORT")
+        LogD(TAG, "Closing connection to PC at $PC_IP:$PC_PORT")
         // Implement the logic to close the connection here
         try {
             pcSocket?.close()
-            Log.d(TAG, "PC Connection closed successfully")
+            LogD(TAG, "PC Connection closed successfully")
         } catch (e: Exception) {
-            Log.e(TAG, "Error closing PC connection", e)
+            LogE(TAG, "Error closing PC connection", e)
         }
     }
     private fun sendBlendshapesToPC(
@@ -389,11 +397,11 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
 
             if (pcSocket == null) {
                 binding.pcLinkState.setImageResource(R.drawable.errorlink)
-                Log.e(TAG, "PC Socket is not initialized. Cannot send blendshapes.")
+                LogE(TAG, "PC Socket is not initialized. Cannot send blendshapes.")
             }
 
             pcSocket?.send(packet)
-            //Log.d(TAG, "Blendshapes sent to PC: $json")
+            //LogD(TAG, "Blendshapes sent to PC: $json")
         }
 
     }
@@ -487,7 +495,7 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
             // Attach the viewfinder's surface provider to preview use case
             preview?.setSurfaceProvider(binding.viewFinder.surfaceProvider)
         } catch (exc: Exception) {
-            Log.e(TAG, "Use case binding failed", exc)
+            LogE(TAG, "Use case binding failed", exc)
         }
     }
 
@@ -505,8 +513,8 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
             faceBlendshapesResultAdapter.notifyDataSetChanged()
 
             if (errorCode == FaceLandmarkerHelper.GPU_ERROR) {
-                Log.d("VtuberPCFragment", "GPU_ERROR" + errorCode.toString())
-                Log.d("VtuberPCFragment", error)
+                LogD("VtuberPCFragment", "GPU_ERROR" + errorCode.toString())
+                LogD("VtuberPCFragment", error)
             }
         }
     }
@@ -571,7 +579,7 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
                     bottom = rightEyeBOTTOM
                 )
 
-                //Log.d("EyeTrack", "LeftEye X: $eyeLX, Y: $eyeLY")
+                //LogD("EyeTrack", "LeftEye X: $eyeLX, Y: $eyeLY")
 
                 // upto 468 landmarks is the base
                 // with iris its up to 478 landmarks
@@ -632,7 +640,7 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
                 }
                 else{
                     // If we don't have enough data, use the previous position
-                    Log.d(TAG, "Not enough data to calculate face position, using default values")
+                    LogD(TAG, "Not enough data to calculate face position, using default values")
                     facePosX = (0.5f - (noseLandmarkindex?.x()?.toFloat() ?: 0f)) * CAMERA_FOV_CM
                     facePosY = (0.5f - (noseLandmarkindex?.y()?.toFloat() ?: 0f)) * CAMERA_FOV_CM
                     facePosZ = CAMERA_FOV_CM // meh
@@ -691,12 +699,12 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
                     // Update the progress bars and text fields with the latest blendshape values
                     sendBlendshapesToPC(blendshapesMap, faceRotation, facePosition, eyeLeft, eyeRight)
                 } else {
-                    Log.d(TAG, "No blendshapes detected")
+                    LogD(TAG, "No blendshapes detected")
                 }
 
 
                 if (faceLandmarks.isNullOrEmpty()) {
-                    Log.d(TAG, "No face landmarks detected")
+                    LogD(TAG, "No face landmarks detected")
                 }
 
 
@@ -705,4 +713,6 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
 
 
     }
+
+
 }

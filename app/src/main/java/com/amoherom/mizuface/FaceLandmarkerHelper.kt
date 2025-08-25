@@ -9,6 +9,7 @@ import android.os.SystemClock
 import android.util.Log
 import androidx.annotation.VisibleForTesting
 import androidx.camera.core.ImageProxy
+import com.amoherom.mizuface.UtilMiz.Companion.LogE
 import com.google.mediapipe.framework.image.BitmapImageBuilder
 import com.google.mediapipe.framework.image.MPImage
 import com.google.mediapipe.tasks.core.BaseOptions
@@ -111,7 +112,7 @@ class FaceLandmarkerHelper (
                     "Face Landmarker failed to initialize. See error logs for " +
                             "details"
                 )
-                Log.e(
+                LogE(
                     TAG, "MediaPipe failed to load the task with error: " + e
                         .message
                 )
@@ -121,7 +122,7 @@ class FaceLandmarkerHelper (
                     "Face Landmarker failed to initialize. See error logs for " +
                             "details", GPU_ERROR
                 )
-                Log.e(
+                LogE(
                     TAG,
                     "Face Landmarker failed to load model with error: " + e.message
                 )
