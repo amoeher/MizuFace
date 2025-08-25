@@ -33,7 +33,7 @@ It connects with software like **VSeeFace** and **VNyan**, letting you stream yo
 - [ ] Add option to Save Custom slots for ip so can easily be changed
 - [ ] Improve the Blenshape preview UI
 - [ ] Improove the blenshape Weght Edit UI
-- [ ] Agg global settings (also give access to edit (Iris Weights/ Face Rotation Weights/ Face Position Weights/ FOV)
+- [ ] Add global settings (also give access to edit (Iris Weights/ Face Rotation Weights/ Face Position Weights/ FOV)
 - [ ] Give option to export and import Weght Customizations
 
 ## 📜 License
