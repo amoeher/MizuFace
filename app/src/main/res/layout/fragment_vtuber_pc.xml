@@ -62,7 +62,7 @@
                 android:layout_height="match_parent"
                 android:layout_marginHorizontal="8dp"
                 android:layout_marginVertical="7dp"
-                app:srcCompat="@drawable/idlerec"
+                app:srcCompat="@drawable/cover"
                 android:contentDescription="Idle Rectangle"/>
 
             <LinearLayout

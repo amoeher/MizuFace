@@ -362,6 +362,36 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
             listenForPC()
         }
 
+        activity?.runOnUiThread {
+            var coverID = getPref("cam_cover_id")
+            if (coverID.isEmpty() || coverID == "1")
+            {
+                binding.camCover.setImageResource(R.drawable.idlerec)
+            }
+            else
+            {
+                binding.camCover.setImageResource(R.drawable.cover_solid)
+            }
+        }
+
+        binding.camCover.setOnClickListener {
+            var coverID = getPref("cam_cover_id")
+            if (coverID.isEmpty() || coverID == "1")
+            {
+                savePref("cam_cover_id", "2")
+                activity?.runOnUiThread {
+                    binding.camCover.setImageResource(R.drawable.cover_solid)
+                }
+            }
+            else
+            {
+                savePref("cam_cover_id", "1")
+                activity?.runOnUiThread {
+                    binding.camCover.setImageResource(R.drawable.idlerec)
+                }
+            }
+        }
+
         listenForPC()
     }
 
