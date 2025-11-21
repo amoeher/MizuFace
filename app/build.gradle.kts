@@ -6,7 +6,7 @@ plugins {
 
 android {
     namespace = "com.amoherom.mizuface"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "com.amoherom.mizuface"

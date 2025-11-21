@@ -1,7 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
-    xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/vtuber_container"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
@@ -26,7 +25,8 @@
             android:layout_height="wrap_content"
             android:layout_marginStart="16dp"
             android:layout_marginTop="16dp"
-            app:srcCompat="@drawable/logo_mizu_face" />
+            app:srcCompat="@drawable/logo_mizu_face"
+            android:contentDescription="Mizu Face Logo"/>
 
         <FrameLayout
             android:id="@+id/camera_preview"
@@ -44,7 +44,8 @@
                 android:layout_marginStart="7dp"
                 android:layout_marginTop="7dp"
                 android:layout_marginEnd="7dp"
-                android:layout_marginBottom="7dp">
+                android:layout_marginBottom="7dp"
+                app:implementationMode="compatible">
 
             </androidx.camera.view.PreviewView>
 
@@ -56,12 +57,13 @@
                 android:focusable="false" />
 
             <ImageView
-                android:id="@+id/imageView"
+                android:id="@+id/camCover"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 android:layout_marginHorizontal="8dp"
                 android:layout_marginVertical="7dp"
-                app:srcCompat="@drawable/idlerec" />
+                app:srcCompat="@drawable/idlerec"
+                android:contentDescription="Idle Rectangle"/>
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -129,7 +131,8 @@
 
                 <ScrollView
                     android:layout_width="match_parent"
-                    android:layout_height="match_parent">
+                    android:layout_height="match_parent"
+                    android:contentDescription="Blenshape List Preview">
 
                     <LinearLayout
                         android:id="@+id/blendshapeList"
@@ -167,13 +170,13 @@
         <ImageView
             android:id="@+id/pc_link_state"
             android:layout_width="30dp"
-            android:layout_height="30dp"
+            android:layout_height="50dp"
             android:contentDescription="Link state icon"
             app:srcCompat="@drawable/unlink" />
 
         <EditText
             android:id="@+id/phoneIpAddress"
-            android:layout_width="wrap_content"
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_marginStart="10dp"
             android:layout_weight="1"
@@ -181,11 +184,12 @@
             android:cursorVisible="false"
             android:focusable="false"
             android:text="192.168.1.3 : 49983"
+            android:autofillHints="pcIPAddress"
             android:textColor="#353535"
             android:textSize="20sp" />
 
         <ImageButton
-            android:id="@+id/imageButton"
+            android:id="@+id/refreshButton"
             android:layout_width="50dp"
             android:layout_height="match_parent"
             android:layout_marginEnd="0dp"

@@ -1,4 +1,3 @@
 package com.amoherom.mizuface
 
-class OverlayView {
-}
+class OverlayView
