@@ -28,13 +28,13 @@ It connects with software like **VSeeFace** and **VNyan**, letting you stream yo
 - Uses mediapipe for facial landmark tracking.  
 
 ## 📌 Roadmap
-- [ ] Make it so it saves the edits/ customizations
+- [x] Make it so it saves the edits/ customizations
 - [ ] Add option to Save Custom slots for ip so can easily be changed
 - [ ] Improve the Blenshape preview UI
 - [ ] Improove the blenshape Weght Edit UI
 - [ ] Add global settings (also give access to edit (Iris Weights/ Face Rotation Weights/ Face Position Weights/ FOV)
 - [ ] Give option to export and import Weght Customizations
-- [ ] Add support for Warudo
+- [ ] Add support for Warudo (currently working on)
 
 ## 📜 License
 MIT License. Feel free to use, modify, and share.  
