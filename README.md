@@ -12,7 +12,7 @@ It connects with software like **VSeeFace** and **VNyan**, letting you stream yo
 
 ## 🚀 Installation
 1. Download the latest release from [Releases](../../releases).  
-2. Extract and run the app on your PC.  
+2. Install the apk in your Android Phone.  
 3. Configure IP and port to match VSeeFace or VNyan settings.  
 4. Select your camera, and start tracking!  
 
