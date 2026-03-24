@@ -35,6 +35,8 @@ It connects with software like **VSeeFace** and **VNyan**, letting you stream yo
 - [ ] Add global settings (also give access to edit (Iris Weights/ Face Rotation Weights/ Face Position Weights/ FOV)
 - [ ] Give option to export and import Weght Customizations
 - [ ] Add support for Warudo (currently working on)
+- [ ] LipSync
+- [ ] FPS Cap
 
 ## 📜 License
 MIT License. Feel free to use, modify, and share.  
