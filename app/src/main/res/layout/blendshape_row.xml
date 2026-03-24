@@ -2,13 +2,15 @@
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
-    android:layout_height="match_parent">
+    android:layout_height="match_parent"
+    android:background="@drawable/rounded_bg"
+    android:layout_marginBottom="10dp">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:gravity="center"
-        android:orientation="horizontal"
+        android:gravity="left"
+        android:orientation="vertical"
         android:paddingBottom="15dp"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
@@ -19,28 +21,123 @@
             android:id="@+id/blendshapeName"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginEnd="15dp"
+            android:layout_marginHorizontal="15dp"
+            android:layout_marginTop="15dp"
             android:layout_weight="0"
-            android:width="150sp"
-            android:text="Name" />
+            android:text="Name"
+            android:textSize="20sp"
+            android:textColor="@color/color_text_dark"/>
+
+
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginHorizontal="15dp"
+            android:layout_marginTop="15dp">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:layout_weight="1"
+                android:layout_marginEnd="15dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Min Value"
+                    android:layout_marginBottom="5dp"
+                    android:textColor="@color/color_placeholder_text_dark"
+                    android:labelFor="@id/blendshapeMin"/>
+
+                <EditText
+                    android:id="@+id/blendshapeMin"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:background="@drawable/input_bg"
+                    android:ems="10"
+                    android:inputType="number"
+                    android:paddingHorizontal="8dp"
+                    android:paddingVertical="4dp"
+                    android:text="0"
+                    android:textColor="@color/color_text_dark"
+                    android:textSize="18sp" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:layout_marginEnd="15dp">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Max Value"
+                    android:layout_marginBottom="5dp"
+                    android:textColor="@color/color_placeholder_text_dark"
+                    android:labelFor="@id/blendshapeMax"/>
+
+                <EditText
+                    android:id="@+id/blendshapeMax"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:background="@drawable/input_bg"
+                    android:ems="10"
+                    android:inputType="number"
+                    android:paddingHorizontal="8dp"
+                    android:paddingVertical="4dp"
+                    android:text="1"
+                    android:textColor="@color/color_text_dark"
+                    android:textSize="18sp" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Weight"
+                    android:layout_marginBottom="5dp"
+                    android:textColor="@color/color_placeholder_text_dark"
+                    android:labelFor="@id/blendshapeWeight"/>
+
+                <EditText
+                    android:id="@+id/blendshapeWeight"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:background="@drawable/input_bg"
+                    android:ems="10"
+                    android:inputType="number"
+                    android:paddingHorizontal="8dp"
+                    android:paddingVertical="4dp"
+                    android:text="1"
+                    android:textColor="@color/color_text_dark"
+                    android:textSize="18sp" />
+            </LinearLayout>
+
+        </LinearLayout>
 
         <ProgressBar
             android:id="@+id/blendshapeProgress"
             style="?android:attr/progressBarStyleHorizontal"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_marginEnd="15dp"
-            android:layout_weight="4" />
-
-        <EditText
-            android:id="@+id/blendshapeValue"
-            android:layout_width="0dp"
-            android:layout_height="32dp"
+            android:layout_width="match_parent"
+            android:layout_height="3dp"
+            android:layout_marginTop="30dp"
+            android:layout_marginHorizontal="15dp"
             android:layout_weight="1"
-            android:background="@drawable/weght_input_bg"
-            android:imeOptions="actionDone"
-            android:inputType="number"
-            android:text="1"
-            android:textAlignment="center" />
+            android:indeterminate="false"
+            android:progress="50"
+            android:progressDrawable="@drawable/rounded_progress"
+            />
     </LinearLayout>
 </androidx.constraintlayout.widget.ConstraintLayout>

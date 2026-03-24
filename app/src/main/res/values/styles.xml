@@ -3,16 +3,13 @@
     <!-- Base application theme. -->
     <style name="Theme.MizuFace" parent="Theme.MaterialComponents.Light.NoActionBar" >
         <!-- Primary brand color. -->
-        <item name="colorPrimary">@color/mp_color_primary</item>
-        <item name="colorPrimaryVariant">@color/mp_color_primary_variant</item>
-        <item name="colorPrimaryDark">@color/mp_color_primary_dark</item>
+        <item name="colorPrimary">@color/color_primary_dark</item>
         <!-- Secondary brand color. -->
-        <item name="colorSecondary">@color/mp_color_secondary</item>
-        <item name="colorSecondaryVariant">@color/mp_color_secondary_variant</item>
+        <item name="colorSecondary">@color/color_secondary_dark</item>
         <item name="colorError">@color/mp_color_error</item>
         <!-- Status bar color. -->
         <item name="android:statusBarColor">?attr/colorPrimary</item>
-        <!-- Customize your theme here. -->
+
     </style>
 
     <style name="BottomSheetSpinnerItemStyle" parent="Widget.AppCompat.Light.DropDownItem.Spinner">
@@ -20,6 +17,6 @@
     </style>
 
     <style name="AppThemeProgressStyle">
-        <item name="colorAccent">@color/mp_color_primary_variant</item>
+        <item name="colorAccent">@color/color_secondary_dark</item>
     </style>
 </resources>

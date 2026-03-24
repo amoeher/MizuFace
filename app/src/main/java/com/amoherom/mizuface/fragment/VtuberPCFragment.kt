@@ -47,6 +47,7 @@ import android.hardware.camera2.CameraCharacteristics
 import android.text.InputType
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
+import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat.getSystemService
 import androidx.core.view.isVisible
 import androidx.core.widget.doOnTextChanged
@@ -129,6 +130,7 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
         savedInstanceState: Bundle?
     ): View {
         _binding = FragmentVtuberPcBinding.inflate(inflater, container, false)
+
         return binding.root
     }
 
@@ -207,7 +209,7 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
     @SuppressLint("MissingPermission")
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-
+        binding.viewFinder.implementationMode = PreviewView.ImplementationMode.COMPATIBLE;
         backgroundExecutor = Executors.newSingleThreadExecutor()
 
         // Check permissions before setting up camera
@@ -244,7 +246,7 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
             // 🔹 Always find children from itemView, not binding.root
             val blendshapeName = itemView.findViewById<TextView>(R.id.blendshapeName)
             val progressBar = itemView.findViewById<ProgressBar>(R.id.blendshapeProgress)
-            val editText = itemView.findViewById<EditText>(R.id.blendshapeValue)
+            val editText = itemView.findViewById<EditText>(R.id.blendshapeWeight)
 
             // Set initial values
             blendshapeName.text = name
