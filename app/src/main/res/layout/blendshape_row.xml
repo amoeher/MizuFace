@@ -65,7 +65,8 @@
                     android:paddingVertical="4dp"
                     android:text="@string/blendshape_zero"
                     android:textColor="@color/color_text_dark"
-                    android:textSize="18sp" />
+                    android:textSize="18sp"
+                    android:imeOptions="actionDone"/>
             </LinearLayout>
 
             <LinearLayout
@@ -95,7 +96,8 @@
                     android:paddingVertical="4dp"
                     android:text="@string/blendshape_one"
                     android:textColor="@color/color_text_dark"
-                    android:textSize="18sp" />
+                    android:textSize="18sp"
+                    android:imeOptions="actionDone"/>
             </LinearLayout>
 
             <LinearLayout
@@ -124,7 +126,8 @@
                     android:paddingVertical="4dp"
                     android:text="@string/blendshape_one"
                     android:textColor="@color/color_text_dark"
-                    android:textSize="18sp" />
+                    android:textSize="18sp"
+                    android:imeOptions="actionDone"/>
             </LinearLayout>
 
         </LinearLayout>

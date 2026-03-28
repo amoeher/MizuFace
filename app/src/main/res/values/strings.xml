@@ -42,4 +42,7 @@
 
     <string name="tracking">Tracking</string>
     <string name="nav_separator">|</string>
+    <string name="controls">Controls</string>
+    <string name="tracking_settings_panel">Tracking Settings Panel</string>
+    <string name="tracking_control_panel">Tracking Control Panel</string>
 </resources>

@@ -22,8 +22,6 @@ import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
 import androidx.navigation.Navigation
-import androidx.recyclerview.widget.LinearLayoutManager
-import androidx.recyclerview.widget.RecyclerView
 import com.amoherom.mizuface.FaceLandmarkerHelper
 import com.amoherom.mizuface.MainViewModel
 import com.amoherom.mizuface.R
@@ -37,14 +35,12 @@ import kotlinx.coroutines.launch
 import java.net.DatagramPacket
 import java.net.DatagramSocket
 import java.net.InetAddress
-import java.nio.charset.Charset
 import java.util.Locale
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import androidx.navigation.findNavController
 import com.amoherom.mizuface.BlendshapeRow
 import com.amoherom.mizuface.BlenshapeMapper
-import com.google.mediapipe.tasks.vision.facelandmarker.FaceLandmarkerResult
 import java.net.NetworkInterface
 import android.hardware.camera2.CameraCharacteristics
 import android.text.InputType
@@ -52,15 +48,16 @@ import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
 import android.widget.LinearLayout
 import androidx.camera.view.PreviewView
-import androidx.core.content.ContextCompat.getSystemService
 import androidx.core.view.isVisible
-import androidx.core.widget.doOnTextChanged
 import com.amoherom.mizuface.CameraFov
 import com.amoherom.mizuface.UDPListner
 import kotlin.math.abs
 import kotlin.math.atan
 import kotlin.math.tan
-import org.json.JSONObject
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.updatePadding
+
 
 class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
 
@@ -115,7 +112,17 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
     // Frame counter used to throttle UI updates
     private var frameCount = 1
 
+    // FPS tracking
+    private var fpsFrameCount = 0
+    private var fpsLastTimestampMs = 0L
+
     private var isLookingForPc = false
+
+    private var isControlsVisible = true
+
+    private var isBlendshapesVisible = false
+
+    private var isTrackingSettingsVisible = false
 
     override fun onResume() {
         super.onResume()
@@ -176,6 +183,13 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
         return null
     }
 
+    private fun getFrameRate(): String {
+        val timeElapsed1: Long = android.os.SystemClock.elapsedRealtime()
+        val timeElapsed2: Long = android.os.SystemClock.elapsedRealtime()
+        val frameTime = 1000.0 / (timeElapsed2 - timeElapsed1)
+        return frameTime.toString()
+    }
+
     private fun ipToString(ip: Int): String {
         return String.format(
             "%d.%d.%d.%d",
@@ -221,15 +235,42 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
         return distanceCmFiltered
     }
 
-    private fun ShowBlendshapes(){
+    private fun showBlendshapes(){
         binding.BlendshapeSelector.isSelected = true
         binding.TrackingSelector.isSelected = false
+        binding.ControlsSelector.isSelected = false
+        isBlendshapesVisible = true
+        isTrackingSettingsVisible = false
+        isControlsVisible = false
+        binding.blendshapeScrollView.visibility = View.VISIBLE
+        binding.controlPanelView.visibility = View.GONE
+        binding.trackingSettingsView.visibility = View.GONE
     }
 
-    private fun ShowTrackingSettings(){
+    private fun showTrackingSettings(){
         binding.BlendshapeSelector.isSelected = false
         binding.TrackingSelector.isSelected = true
+        binding.ControlsSelector.isSelected = false
+        isBlendshapesVisible = false
+        isTrackingSettingsVisible = true
+        isControlsVisible = false
+        binding.blendshapeScrollView.visibility = View.GONE
+        binding.controlPanelView.visibility = View.GONE
+        binding.trackingSettingsView.visibility = View.VISIBLE
     }
+
+    private fun showControls(){
+        binding.BlendshapeSelector.isSelected = false
+        binding.TrackingSelector.isSelected = false
+        binding.ControlsSelector.isSelected = true
+        isBlendshapesVisible = false
+        isTrackingSettingsVisible = false
+        isControlsVisible = true
+        binding.blendshapeScrollView.visibility = View.GONE
+        binding.controlPanelView.visibility = View.VISIBLE
+        binding.trackingSettingsView.visibility = View.GONE
+    }
+
     @SuppressLint("MissingPermission")
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
@@ -237,16 +278,35 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
         ioScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
         backgroundExecutor = Executors.newSingleThreadExecutor()
 
+        // Correct - shrinks the whole layout so the ScrollView's bottom edge lifts above the keyboard
+        ViewCompat.setOnApplyWindowInsetsListener(binding.root) { v, insets ->
+            val imeHeight = insets.getInsets(WindowInsetsCompat.Type.ime()).bottom
+            val navBarHeight = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom
+            val keyboardOpen = imeHeight > navBarHeight
+            v.updatePadding(bottom = (imeHeight - navBarHeight).coerceAtLeast(0))
+            // Scroll AFTER layout has resized, not before keyboard appears
+            if (keyboardOpen) {
+                binding.blendshapeScrollView.post {
+                    binding.blendshapeScrollView.findFocus()?.let { focused ->
+                        val rect = android.graphics.Rect(0, 0, focused.width, focused.height)
+                        focused.requestRectangleOnScreen(rect, false)
+                    }
+                }
+            }
+            insets
+        }
+
         // Check permissions before setting up camera
         if (!PermissionsFragment.hasPermissions(requireContext())) {
             requireActivity().findNavController(R.id.fragment_container).navigate(R.id.action_vtuberPCFragment_to_permissions_fragment)
             return
         }
 
-        ShowBlendshapes()
+        showBlendshapes()
 
-        binding.BlendshapeSelector.setOnClickListener { ShowBlendshapes() }
-        binding.TrackingSelector.setOnClickListener { ShowTrackingSettings() }
+        binding.BlendshapeSelector.setOnClickListener { showBlendshapes() }
+        binding.TrackingSelector.setOnClickListener { showTrackingSettings() }
+        binding.ControlsSelector.setOnClickListener { showControls() }
 
         binding.viewFinder.post{
             setUpCamera()
@@ -268,6 +328,7 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
         // Defer row inflation to after the first render so the camera preview appears immediately
         view.post {
             if (_binding == null) return@post
+            if (!isBlendshapesVisible) return@post
             val container = binding.blendshapeList
             val rowInflater = LayoutInflater.from(requireContext())
             val blendShapesList = BlenshapeMapper.blendshapeBundle.map { it.first }
@@ -309,29 +370,32 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
 
             for (row in blendshapeRows) {
                 row.blendshapeWeight.inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
-
-                row.blendshapeWeight.setOnClickListener {
-                    val editTextd = EditText(requireContext())
-                    editTextd.setText("${row.blendshapeWeight.text}")
-                    editTextd.setSelection(editTextd.text.length)
-
-                    val dialog = androidx.appcompat.app.AlertDialog.Builder(requireContext())
-                        .setTitle(getString(R.string.edit_weight_for, row.blendshapeName))
-                        .setView(editTextd)
-                        .setPositiveButton(getString(R.string.dialog_ok)) { _, _ ->
-                            val text = editTextd.text.toString()
-                            if (editTextd.text.isNullOrEmpty() || text.toFloatOrNull() == null) {
-                                Toast.makeText(requireContext(), getString(R.string.blendshape_weight_not_valid), Toast.LENGTH_SHORT).show()
-                                return@setPositiveButton
-                            }
+                row.blendshapeWeight.setOnEditorActionListener { _, actionId, _ ->
+                    if (actionId == EditorInfo.IME_ACTION_DONE) {
+                        val text = row.blendshapeWeight.text.toString()
+                        val value = text.toFloatOrNull()
+                        if (value == null) {
+                            Toast.makeText(requireContext(), getString(R.string.blendshape_weight_not_valid), Toast.LENGTH_SHORT).show()
+                        } else {
                             savePref(row.blendshapeName, text)
-                            row.blendshapeWeight.setText(text)
-                            row.cachedMultiplier = text.toFloat()
+                            row.cachedMultiplier = value
                             InitiatePCConnection()
                         }
-                        .setNegativeButton(getString(R.string.dialog_cancel), null)
-                        .create()
-                    dialog.show()
+                        val imm = requireContext().getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+                        imm.hideSoftInputFromWindow(row.blendshapeWeight.windowToken, 0)
+                        row.blendshapeWeight.clearFocus()
+                        true
+                    } else false
+                }
+
+                row.blendshapeWeight.setOnFocusChangeListener { v, hasFocus ->
+                    if (!hasFocus) {
+                        val text = row.blendshapeWeight.text.toString()
+                        val value = text.toFloatOrNull() ?: return@setOnFocusChangeListener
+                        savePref(row.blendshapeName, text)
+                        row.cachedMultiplier = value
+                        InitiatePCConnection()
+                    }
                 }
             }
 
@@ -682,6 +746,20 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
         if (_binding == null) return
 
         val shouldUpdateUi = (++frameCount % UI_UPDATE_INTERVAL) == 0
+
+        // FPS counter — sample once per second
+        fpsFrameCount++
+        val nowMs = System.currentTimeMillis()
+        if (fpsLastTimestampMs == 0L) fpsLastTimestampMs = nowMs
+        val elapsedMs = nowMs - fpsLastTimestampMs
+        if (elapsedMs >= 1000L) {
+            val fps = (fpsFrameCount * 1000L / elapsedMs).toInt()
+            fpsFrameCount = 0
+            fpsLastTimestampMs = nowMs
+            activity?.runOnUiThread {
+                if (_binding != null) binding.fpsCounter.text = fps.toString()
+            }
+        }
         val blendshapes = resultBundle.result.faceBlendshapes()
         val faceLandmarks = resultBundle.result.faceLandmarks()
         val firstFace = faceLandmarks.firstOrNull()
