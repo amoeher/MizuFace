@@ -17,6 +17,7 @@ cameraCamera2 = "1.4.2"
 tasksCore = "0.10.3"
 tasksVision = "0.20230731"
 cameraLifecycle = "1.4.2"
+cardview = "1.0.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -42,6 +43,7 @@ androidx-camera-camera2 = { group = "androidx.camera", name = "camera-camera2", 
 tasks-core = { module = "ccom.google.mediapipe:tasks-core", version.ref = "tasksCore" }
 tasks-vision = { module = "com.google.mediapipe:tasks-vision", version.ref = "tasksVision" }
 androidx-camera-lifecycle = { group = "androidx.camera", name = "camera-lifecycle", version.ref = "cameraLifecycle" }
+androidx-cardview = { group = "androidx.cardview", name = "cardview", version.ref = "cardview" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

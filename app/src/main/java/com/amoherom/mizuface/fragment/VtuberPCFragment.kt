@@ -31,11 +31,14 @@ import com.amoherom.mizuface.databinding.FragmentVtuberPcBinding
 import com.google.mediapipe.tasks.vision.core.RunningMode
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import java.net.DatagramPacket
 import java.net.DatagramSocket
 import java.net.InetAddress
 import java.nio.charset.Charset
+import java.util.Locale
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import androidx.navigation.findNavController
@@ -78,6 +81,7 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
 
     companion object {
         private const val TAG = "MIZU"
+        private const val UI_UPDATE_INTERVAL = 1 // update progress bars every 3rd frame
     }
 
     private var _binding: FragmentVtuberPcBinding? = null
@@ -101,7 +105,14 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
 
     private var pcSocket: DatagramSocket? = null
 
-    private lateinit var blendshapeRows: List<BlendshapeRow>
+    // Safe default - rows are inflated asynchronously after first render
+    private var blendshapeRows: List<BlendshapeRow> = emptyList()
+
+    // Persistent IO scope - avoids creating a new CoroutineScope every frame
+    private var ioScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+
+    // Frame counter used to throttle UI updates
+    private var frameCount = 1
 
     private var isLookingForPc = false
 
@@ -136,7 +147,10 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
 
     override fun onDestroyView() {
         super.onDestroyView()
+        listner?.stop()
+        backgroundExecutor.shutdown()
         _binding = null
+        ioScope.cancel()
         ClosePCConnection()
     }
 
@@ -210,6 +224,7 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
         binding.viewFinder.implementationMode = PreviewView.ImplementationMode.COMPATIBLE;
+        ioScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
         backgroundExecutor = Executors.newSingleThreadExecutor()
 
         // Check permissions before setting up camera
@@ -235,68 +250,70 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
             )
         }
 
-        val container = binding.blendshapeList
-        val inflater = LayoutInflater.from(requireContext())
-        val blendShapesList = BlenshapeMapper.blendshapeBundle.map { it.first }
-        val blendshapeRowsList = mutableListOf<BlendshapeRow>()
+        // Defer row inflation to after the first render so the camera preview appears immediately
+        view.post {
+            if (_binding == null) return@post
+            val container = binding.blendshapeList
+            val rowInflater = LayoutInflater.from(requireContext())
+            val blendShapesList = BlenshapeMapper.blendshapeBundle.map { it.first }
+            val blendshapeRowsList = mutableListOf<BlendshapeRow>()
 
-        for (name in blendShapesList) {
-            val itemView = inflater.inflate(R.layout.blendshape_row, container, false)
+            for (name in blendShapesList) {
+                val itemView = rowInflater.inflate(R.layout.blendshape_row, container, false)
 
-            // 🔹 Always find children from itemView, not binding.root
-            val blendshapeName = itemView.findViewById<TextView>(R.id.blendshapeName)
-            val progressBar = itemView.findViewById<ProgressBar>(R.id.blendshapeProgress)
-            val editText = itemView.findViewById<EditText>(R.id.blendshapeWeight)
+                val blendshapeName = itemView.findViewById<TextView>(R.id.blendshapeName)
+                val progressBar = itemView.findViewById<ProgressBar>(R.id.blendshapeProgress)
+                val editText = itemView.findViewById<EditText>(R.id.blendshapeWeight)
 
-            // Set initial values
-            blendshapeName.text = name
-            progressBar.progress = 0
-            editText.setText(getPref(name))
+                val savedWeight = getPref(name)
+                blendshapeName.text = name
+                progressBar.progress = 0
+                editText.setText(savedWeight)
 
-            // Store in list for later updates
-            blendshapeRowsList.add(BlendshapeRow(name, progressBar, editText))
+                val row = BlendshapeRow(
+                    blendshapeName = name,
+                    blendshapeProgress = progressBar,
+                    blendshapeWeight = editText,
+                    cachedMultiplier = savedWeight.toFloatOrNull() ?: 1f
+                )
+                blendshapeRowsList.add(row)
+                container.addView(itemView)
+            }
 
-            container.addView(itemView)
-        }
+            blendshapeRows = blendshapeRowsList
 
-        // Store the list for use in onResults
-        blendshapeRows = blendshapeRowsList
+            for (row in blendshapeRows) {
+                row.blendshapeWeight.inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
 
+                row.blendshapeWeight.setOnClickListener {
+                    val editTextd = EditText(requireContext())
+                    editTextd.setText("${row.blendshapeWeight.text}")
+                    editTextd.setSelection(editTextd.text.length)
 
-        for (row in blendshapeRows) {
-            row.blendshapeWeight.inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
-
-            // Show soft keyboard when the EditText is clicked force
-            row.blendshapeWeight.setOnClickListener {
-                val editTextd = EditText(requireContext())
-                editTextd.setText("${row.blendshapeWeight.text}")
-                editTextd.setSelection(editTextd.text.length)
-
-                val dialog = androidx.appcompat.app.AlertDialog.Builder(requireContext())
-                    .setTitle("Edit Weight for" + row.blendshapeName)
-                    .setView(editTextd)
-                    .setPositiveButton("OK") { _, _ ->
-                        val text = editTextd.text.toString()
-                        if (editTextd.text.isNullOrEmpty() || text.toFloatOrNull() == null) {
-                            Toast.makeText(requireContext(), "Blendshape Wight Not Valid", Toast.LENGTH_SHORT).show()
-                            return@setPositiveButton
+                    val dialog = androidx.appcompat.app.AlertDialog.Builder(requireContext())
+                        .setTitle(getString(R.string.edit_weight_for, row.blendshapeName))
+                        .setView(editTextd)
+                        .setPositiveButton(getString(R.string.dialog_ok)) { _, _ ->
+                            val text = editTextd.text.toString()
+                            if (editTextd.text.isNullOrEmpty() || text.toFloatOrNull() == null) {
+                                Toast.makeText(requireContext(), getString(R.string.blendshape_weight_not_valid), Toast.LENGTH_SHORT).show()
+                                return@setPositiveButton
+                            }
+                            savePref(row.blendshapeName, text)
+                            row.blendshapeWeight.setText(text)
+                            row.cachedMultiplier = text.toFloat()
+                            InitiatePCConnection()
                         }
-
-                        savePref(row.blendshapeName, text)
-
-                        row.blendshapeWeight.setText(text)
-
-                        InitiatePCConnection()
-                    }
-                    .setNegativeButton("Cancel", null)
-                    .create()
-                dialog.show()
+                        .setNegativeButton(getString(R.string.dialog_cancel), null)
+                        .create()
+                    dialog.show()
+                }
             }
 
         }
 
 
-        val ipEditText = binding.phoneIpAddress
+        val ipEditText = binding.statusText
         ipEditText.setOnClickListener {
             ipEditText.isFocusableInTouchMode = true
             ipEditText.isFocusable = true
@@ -311,13 +328,13 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
             editText.setSelection(editText.text.length)
 
             val dialog = androidx.appcompat.app.AlertDialog.Builder(requireContext())
-                .setTitle("Edit IP Address")
+                .setTitle(getString(R.string.edit_ip_address))
                 .setView(editText)
-                .setPositiveButton("OK") { _, _ ->
+                .setPositiveButton(getString(R.string.dialog_ok)) { _, _ ->
                     val text = editText.text.toString()
                     val ipPortRegex = Regex("""^(\d{1,3}(\.\d{1,3}){3})(\s*:\s*\d{1,5})?$""")
                     if (!ipPortRegex.matches(text.trim())) {
-                        Toast.makeText(requireContext(), "Invalid IP address format", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(requireContext(), getString(R.string.invalid_ip_address_format), Toast.LENGTH_SHORT).show()
                         return@setPositiveButton
                     }
                     ipEditText.setText(text)
@@ -331,7 +348,7 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
                     }
                     InitiatePCConnection()
                 }
-                .setNegativeButton("Cancel", null)
+                .setNegativeButton(getString(R.string.dialog_cancel), null)
                 .create()
             dialog.show()
         }
@@ -400,7 +417,8 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
     var listner: UDPListner? = null
     private fun listenForPC(){
         activity?.runOnUiThread {
-            binding.pcLinkState.setImageResource(R.drawable.refreshalt)
+            binding.pcLinkState.setImageResource(R.drawable.search)
+            binding.statusText.setText(R.string.state_scanning)
         }
         listner = UDPListner() { ip, port ->
             Log.d(TAG, "GOT BR $ip: $port")
@@ -434,15 +452,22 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
         try {
             pcSocket = DatagramSocket()
             activity?.runOnUiThread {
-                binding.pcLinkState.setImageResource(R.drawable.link)
+                binding.pcLinkState.setImageResource(R.drawable.connecting)
+                binding.statusText.setText(R.string.state_connecting)
             }
-            val ipState = "${getLocalIPAddress()?: "Unknown IP"} : $PC_PORT"
-            binding.phoneIpAddress.setText(ipState)
+            val localIp = getLocalIPAddress() ?: getString(R.string.unknown_ip)
+            val ipState = getString(R.string.phone_ip_state, localIp, PC_PORT)
+            activity?.runOnUiThread {
+                binding.pcLinkState.setImageResource(R.drawable.link_connected)
+                binding.statusText.setText(R.string.state_connected)
+            }
+
             Log.d(TAG, "PC Connection initiated successfully")
             isLookingForPc = false
         } catch (e: Exception) {
             activity?.runOnUiThread {
-                binding.pcLinkState.setImageResource(R.drawable.errorlink)
+                binding.pcLinkState.setImageResource(R.drawable.unlink)
+                binding.statusText.setText(R.string.state_disconnected)
             }
             Log.e(TAG, "Error initiating PC connection", e)
         }
@@ -459,6 +484,11 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
         } catch (e: Exception) {
             Log.e(TAG, "Error closing PC connection", e)
         }
+
+        activity?.runOnUiThread {
+            binding.pcLinkState.setImageResource(R.drawable.unlink)
+            binding.statusText.setText(R.string.state_disconnected)
+        }
     }
     private fun sendBlendshapesToPC(
         blendshapes: Map<String, Float>,
@@ -470,12 +500,9 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
         if (isLookingForPc){
             return
         }
-        // This function can be used to send blendshapes to a PC
-        // For example, using a socket connection or HTTP request
-        // Here we just log the blendshapes
-        CoroutineScope(Dispatchers.IO).launch {
+        ioScope.launch {
             val json = buildJson(blendshapes, Position, Rotation, eyeLeft, eyeRight)
-            val buffer = json.toByteArray(Charset.forName("UTF-8"))
+            val buffer = json.toByteArray(Charsets.UTF_8)
             val packet = DatagramPacket(
                 buffer,
                 buffer.size,
@@ -485,7 +512,12 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
 
 
             if (pcSocket == null) {
-                binding.pcLinkState.setImageResource(R.drawable.errorlink)
+                activity?.runOnUiThread {
+                    if (_binding != null) {
+                        binding.pcLinkState.setImageResource(R.drawable.unlink)
+                        binding.statusText.setText(R.string.state_disconnected)
+                    }
+                }
                 Log.e(TAG, "PC Socket is not initialized. Cannot send blendshapes.")
             }
 
@@ -527,19 +559,19 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
             """{"k":"${it.key}","v":${it.value}}"""
         }
 
-        return """
-    {
-        "Timestamp": ${System.currentTimeMillis()},
-        "Hotkey": -1,
-        "FaceFound": true,
-        "Rotation": { "x": ${String.format("%.8f", rotation.first)}, "y": ${String.format("%.8f", rotation.second)}, "z": ${String.format("%.8f", rotation.third)} },
-        "Position": { "x": ${String.format("%.8f", position.first)}, "y": ${String.format("%.8f", position.second)}, "z": ${String.format("%.8f", position.third)} },
-        "EyeLeft": { "x": ${String.format("%.8f", eyeLeft.first)}, "y": ${String.format("%.8f", eyeLeft.second)}, "z": ${String.format("%.8f", eyeLeft.third)} },
-        "EyeRight": { "x": ${String.format("%.8f", eyeRight.first)}, "y": ${String.format("%.8f", eyeRight.second)}, "z": ${String.format("%.8f", eyeRight.third)} },
-        "BlendShapes": [ $blendshapesJson ]
+        return "{" +
+            "\"Timestamp\":${System.currentTimeMillis()}," +
+            "\"Hotkey\":-1," +
+            "\"FaceFound\":true," +
+            "\"Rotation\":{\"x\":${fmt8(rotation.first)},\"y\":${fmt8(rotation.second)},\"z\":${fmt8(rotation.third)}}," +
+            "\"Position\":{\"x\":${fmt8(position.first)},\"y\":${fmt8(position.second)},\"z\":${fmt8(position.third)}}," +
+            "\"EyeLeft\":{\"x\":${fmt8(eyeLeft.first)},\"y\":${fmt8(eyeLeft.second)},\"z\":${fmt8(eyeLeft.third)}}," +
+            "\"EyeRight\":{\"x\":${fmt8(eyeRight.first)},\"y\":${fmt8(eyeRight.second)},\"z\":${fmt8(eyeRight.third)}}," +
+            "\"BlendShapes\":[${blendshapesJson}]" +
+            "}"
     }
-    """.trimIndent().replace(Regex("\\s+"), "")
-    }
+
+    private fun fmt8(value: Float): String = String.format(Locale.US, "%.8f", value)
 
 
     @SuppressLint("UnsafeOptInUsageError")
@@ -622,183 +654,145 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
 
 
     override fun onResults(resultBundle: FaceLandmarkerHelper.ResultBundle) {
-        activity?.runOnUiThread {
-            if (_binding != null){
-                faceBlendshapesResultAdapter.updateResults(resultBundle.result)
-                faceBlendshapesResultAdapter.notifyDataSetChanged()
+        if (_binding == null) return
 
-                var blendhsapes = resultBundle.result?.faceBlendshapes()
-                var faceLandmarks = resultBundle.result?.faceLandmarks()
-                var noseLandmarkindex = faceLandmarks?.get(0)?.get(1)
-                faceLandmarks?.get(0)?.get(0)
+        val shouldUpdateUi = (++frameCount % UI_UPDATE_INTERVAL) == 0
+        val blendshapes = resultBundle.result.faceBlendshapes()
+        val faceLandmarks = resultBundle.result.faceLandmarks()
+        val firstFace = faceLandmarks.firstOrNull()
 
-                var leftEyeLandmarkIndex = faceLandmarks?.get(0)?.get(33)
-                var leftEyeLEFT = faceLandmarks?.get(0)?.get(133)
-                var leftEyeRIGHT = faceLandmarks?.get(0)?.get(33)
-                var leftEyeTOP = faceLandmarks?.get(0)?.get(159)
-                var leftEyeBOTTOM = faceLandmarks?.get(0)?.get(145)
+        if (firstFace == null) {
+            Log.d(TAG, "No face landmarks detected")
+            return
+        }
 
-                var leftIrisLandmarkIndex = faceLandmarks?.get(0)?.get(468)
-                var leftIrisx = leftIrisLandmarkIndex?.x()?.toFloat() ?: 0f
-                leftIrisLandmarkIndex?.y()?.toFloat() ?: 0f
+        val noseLandmarkindex = firstFace.getOrNull(1)
+        val leftEyeLandmarkIndex = firstFace.getOrNull(33)
+        val leftEyeLEFT = firstFace.getOrNull(133)
+        val leftEyeRIGHT = firstFace.getOrNull(33)
+        val leftEyeTOP = firstFace.getOrNull(159)
+        val leftEyeBOTTOM = firstFace.getOrNull(145)
 
-                var rightEyeLandmarkIndex = faceLandmarks?.get(0)?.get(263)
-                var rightEyeLEFT = faceLandmarks?.get(0)?.get(362)
-                var rightEyeRIGHT = faceLandmarks?.get(0)?.get(263)
-                var rightEyeTOP = faceLandmarks?.get(0)?.get(386)
-                var rightEyeBOTTOM = faceLandmarks?.get(0)?.get(374)
+        val leftIrisLandmarkIndex = firstFace.getOrNull(468)
+        val leftIrisx = leftIrisLandmarkIndex?.x()?.toFloat() ?: 0f
 
-                var rightIrisLandmarkIndex = faceLandmarks?.get(0)?.get(473)
-                var rightIrisx = rightIrisLandmarkIndex?.x()?.toFloat() ?: 0f
-                rightIrisLandmarkIndex?.y()?.toFloat() ?: 0f
+        val rightEyeLandmarkIndex = firstFace.getOrNull(263)
+        val rightEyeLEFT = firstFace.getOrNull(362)
+        val rightEyeRIGHT = firstFace.getOrNull(263)
+        val rightEyeTOP = firstFace.getOrNull(386)
+        val rightEyeBOTTOM = firstFace.getOrNull(374)
 
-                val (eyeLX, eyeLY) = calcEyeOffsetXY(
-                    iris = leftIrisLandmarkIndex,
-                    left = leftEyeLEFT,
-                    right = leftEyeRIGHT,
-                    top = leftEyeTOP,
-                    bottom = leftEyeBOTTOM
-                )
+        val rightIrisLandmarkIndex = firstFace.getOrNull(473)
+        val rightIrisx = rightIrisLandmarkIndex?.x()?.toFloat() ?: 0f
 
-                val (eyeRX, eyeRY) = calcEyeOffsetXY(
-                    iris = rightIrisLandmarkIndex,
-                    left = rightEyeLEFT,
-                    right = rightEyeRIGHT,
-                    top = rightEyeTOP,
-                    bottom = rightEyeBOTTOM
-                )
+        val (eyeLX, eyeLY) = if (
+            leftIrisLandmarkIndex != null &&
+            leftEyeLEFT != null &&
+            leftEyeRIGHT != null &&
+            leftEyeTOP != null &&
+            leftEyeBOTTOM != null
+        ) {
+            calcEyeOffsetXY(leftIrisLandmarkIndex, leftEyeLEFT, leftEyeRIGHT, leftEyeTOP, leftEyeBOTTOM)
+        } else {
+            Pair(0f, 0f)
+        }
 
-                //Log.d("EyeTrack", "LeftEye X: $eyeLX, Y: $eyeLY")
+        val (eyeRX, eyeRY) = if (
+            rightIrisLandmarkIndex != null &&
+            rightEyeLEFT != null &&
+            rightEyeRIGHT != null &&
+            rightEyeTOP != null &&
+            rightEyeBOTTOM != null
+        ) {
+            calcEyeOffsetXY(rightIrisLandmarkIndex, rightEyeLEFT, rightEyeRIGHT, rightEyeTOP, rightEyeBOTTOM)
+        } else {
+            Pair(0f, 0f)
+        }
 
-                // upto 468 landmarks is the base
-                // with iris its up to 478 landmarks
+        val dxYaw = (rightEyeLandmarkIndex?.x() ?: 0f) - (leftEyeLandmarkIndex?.x() ?: 0f)
+        val dyYaw = (rightEyeLandmarkIndex?.z() ?: 0f) - (leftEyeLandmarkIndex?.z() ?: 0f)
+        val yaw = Math.atan2(dxYaw.toDouble(), dyYaw.toDouble()).toFloat()
 
-                // Yaw (side turn) → difference in eye X positions
-                val dxYaw = (rightEyeLandmarkIndex?.x() ?: 0f) - (leftEyeLandmarkIndex?.x() ?: 0f)
-                val dyYaw = (rightEyeLandmarkIndex?.z() ?: 0f) - (leftEyeLandmarkIndex?.z() ?: 0f)
-                val yaw = Math.atan2(dxYaw.toDouble(), dyYaw.toDouble()).toFloat()
+        val eyeY = ((leftEyeLandmarkIndex?.y() ?: 0f) + (rightEyeLandmarkIndex?.y() ?: 0f)) / 2
+        val pitch = Math.atan2((noseLandmarkindex?.y() ?: 0f) - eyeY.toDouble(), 1.0).toFloat()
 
-                // Pitch (up/down) → difference between nose and eyes
-                val eyeY = ((leftEyeLandmarkIndex?.y() ?: 0f) + (rightEyeLandmarkIndex?.y() ?: 0f)) / 2
-                val pitch = Math.atan2((noseLandmarkindex?.y() ?: 0f) - eyeY.toDouble(), 1.0).toFloat()
+        val roll = Math.atan2(
+            ((rightEyeLandmarkIndex?.y() ?: 0f) - (leftEyeLandmarkIndex?.y() ?: 0f)).toDouble(),
+            ((rightEyeLandmarkIndex?.x() ?: 0f) - (leftEyeLandmarkIndex?.x() ?: 0f)).toDouble()
+        ).toFloat()
 
-                // Roll stays same (tilt head side)
-                val roll = Math.atan2(
-                    ((rightEyeLandmarkIndex?.y() ?: 0f) - (leftEyeLandmarkIndex?.y() ?: 0f)).toDouble(),
-                    ((rightEyeLandmarkIndex?.x() ?: 0f) - (leftEyeLandmarkIndex?.x() ?: 0f)).toDouble()
-                ).toFloat()
+        val faceRotation = Triple(
+            50f - (yaw * HEAD_YAW_WEIGHT),
+            pitch * HEAD_PICH_WEIGHT,
+            -roll * HEAD_ROLL_WEIGHT,
+        )
 
+        var facePosX = (0.5f - (noseLandmarkindex?.x()?.toFloat() ?: 0f)) * CAMERA_FOV_CM
+        var facePosY = (0.5f - (noseLandmarkindex?.y()?.toFloat() ?: 0f)) * CAMERA_FOV_CM
+        var facePosZ = (0.5f - (noseLandmarkindex?.z()?.toFloat() ?: 0f)) * CAMERA_FOV_CM
 
+        val f = fov
+        val facePosition = if (
+            f != null &&
+            leftEyeLandmarkIndex != null &&
+            rightIrisLandmarkIndex != null &&
+            noseLandmarkindex != null
+        ) {
+            val distanceCm = estimateDistanceFromEyes(leftIrisx, rightIrisx)
+            val wCm = CameraFov.widthAtDistance(distanceCm, f)
+            val hCm = CameraFov.heightAtDistance(distanceCm, f)
+            val nx = noseLandmarkindex.x().toFloat()
+            val ny = noseLandmarkindex.y().toFloat()
 
-                var faceRotation = Triple(
-                    50f - (yaw.toFloat() * HEAD_YAW_WEIGHT),
-                    pitch.toFloat() * HEAD_PICH_WEIGHT,
-                    -roll.toFloat() * HEAD_ROLL_WEIGHT,
-                )
+            facePosX = ((0.5f - nx) * wCm).toFloat()
+            facePosY = ((0.5f - ny) * hCm).toFloat()
+            facePosZ = distanceCm.toFloat()
+            Triple(facePosX, facePosY, facePosZ)
+        } else {
+            Triple(facePosX, facePosY, CAMERA_FOV_CM)
+        }
 
-                var facePosX = (0.5f - (noseLandmarkindex?.x()?.toFloat() ?: 0f)) * CAMERA_FOV_CM
-                var facePosY = (0.5f - ( noseLandmarkindex?.y()?.toFloat() ?: 0f)) * CAMERA_FOV_CM
-                var facePosZ = (0.5f - ( noseLandmarkindex?.z()?.toFloat() ?: 0f)) * CAMERA_FOV_CM
+        val eyeLeft = Triple(eyeLY * EYE_WEIGHT, -eyeLX * EYE_WEIGHT, 0.0f)
+        val eyeRight = Triple(eyeRY * EYE_WEIGHT, eyeRX * EYE_WEIGHT, 0.0f)
 
-                val f = fov
+        if (blendshapes != null && blendshapes.isPresent) {
+            val weightedBlendshapesMap = blendshapes.get()[0].associate {
+                it.categoryName() to it.score()
+            }.toMutableMap()
 
-                var facePosition = Triple(0f, 0f, 0f)
+            val progressByBlendshape = if (shouldUpdateUi) mutableMapOf<String, Int>() else null
+            for (row in blendshapeRows) {
+                val name = row.blendshapeName
+                val score = weightedBlendshapesMap[name] ?: 0f
+                row.blendshapeValue = score
 
-                if (f != null && leftEyeLandmarkIndex != null && rightIrisLandmarkIndex != null && noseLandmarkindex != null){
-                    val distanceCm = estimateDistanceFromEyes(
-                        leftIrisx,
-                        rightIrisx
-                    )
-
-                    val wCm = CameraFov.widthAtDistance(distanceCm, f)
-                    val hCm = CameraFov.heightAtDistance(distanceCm, f)
-
-                    val nx = noseLandmarkindex.x().toFloat()
-                    val ny = noseLandmarkindex.y().toFloat()
-                    val nxWorld = nx
-
-                    facePosX = ((0.5f - nxWorld) * wCm).toFloat()
-                    facePosY = ((0.5f - ny) * hCm).toFloat()
-                    facePosZ = distanceCm.toFloat() // Use the estimated distance as Z position
-
-                    facePosition = Triple(
-                        facePosX,
-                        facePosY,
-                        facePosZ
-                    )
-                }
-                else{
-                    // If we don't have enough data, use the previous position
-                    Log.d(TAG, "Not enough data to calculate face position, using default values")
-                    facePosX = (0.5f - (noseLandmarkindex?.x()?.toFloat() ?: 0f)) * CAMERA_FOV_CM
-                    facePosY = (0.5f - (noseLandmarkindex?.y()?.toFloat() ?: 0f)) * CAMERA_FOV_CM
-                    facePosZ = CAMERA_FOV_CM // meh
-                    facePosition = Triple(facePosX, facePosY, facePosZ)
-                }
-
-                var eyeLeft = Triple(eyeLX, eyeLY, 0.0f)
-                var eyeRight = Triple(eyeRX, eyeRY, 0.0f)
-
-                if (faceLandmarks != null && faceLandmarks.isNotEmpty()) {
-
-                    eyeLeft = Triple(
-                        eyeLY * EYE_WEIGHT,
-                        -eyeLX * EYE_WEIGHT,
-                        0.0f
-                    )
-
-                    eyeRight = Triple(
-                        eyeRY * EYE_WEIGHT,
-                        eyeRX * EYE_WEIGHT,
-                        0.0f
-                    )
-
+                if (progressByBlendshape != null) {
+                    progressByBlendshape[name] = (score * 100).toInt().coerceIn(0, 100)
                 }
 
-                if (blendhsapes != null && blendhsapes.isPresent) {
-                    var blendshapesMap = blendhsapes.get()[0].associate {
-                        it.categoryName() to it.score()
-                    }.toMutableMap()
+                weightedBlendshapesMap[name] = score * row.cachedMultiplier
+            }
 
-                    // Update the UI elements for each blendshape
-                    for (blendshapeRow in blendshapeRows) {
-                        val blendshapeName = blendshapeRow.blendshapeName
-                        val score = blendshapesMap[blendshapeName] ?: 0f
+            sendBlendshapesToPC(weightedBlendshapesMap, faceRotation, facePosition, eyeLeft, eyeRight)
 
-                        // Update progress bar (convert score from 0-1 to 0-100)
-                        val progressValue = (score * 100).toInt().coerceIn(0, 100)
-                        blendshapeRow.blendshapeValue = score
-                        blendshapeRow.blendshapeProgress.progress = progressValue
+            if (shouldUpdateUi) {
+                activity?.runOnUiThread {
+                    if (_binding == null) return@runOnUiThread
 
-                        // Get the multiplier from the EditText (default to 1 if empty or invalid)
-                        val multiplierText = blendshapeRow.blendshapeWeight.text.toString()
-                        val multiplier = try {
-                            multiplierText.toFloat()
-                        } catch (e: NumberFormatException) {
-                            1f
-                        }
+                    faceBlendshapesResultAdapter.updateResults(resultBundle.result)
+                    faceBlendshapesResultAdapter.notifyDataSetChanged()
 
-                        // Use the multiplier when sending to PC
-                        blendshapesMap[blendshapeName]?.let {
-                            // Modify the value being sent to PC
-                            blendshapesMap[blendshapeName] = it * multiplier
+                    progressByBlendshape?.let { progressMap ->
+                        for (row in blendshapeRows) {
+                            row.blendshapeProgress.progress = progressMap[row.blendshapeName] ?: 0
                         }
                     }
-
-                    // Update the progress bars and text fields with the latest blendshape values
-                    sendBlendshapesToPC(blendshapesMap, faceRotation, facePosition, eyeLeft, eyeRight)
-                } else {
-                    Log.d(TAG, "No blendshapes detected")
                 }
-
-
-                if (faceLandmarks.isNullOrEmpty()) {
-                    Log.d(TAG, "No face landmarks detected")
-                }
-
-
             }
+        } else {
+            Log.d(TAG, "No blendshapes detected")
         }
+
 
 
     }

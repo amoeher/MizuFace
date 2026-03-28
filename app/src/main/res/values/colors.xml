@@ -16,9 +16,12 @@
     <color name="color_primary_dark">#4b83c3</color>
     <color name="color_secondary_dark">#cc74c6</color>
     <color name="color_app_background_dark">#061015</color>
+
     <color name="color_text_dark">#fff</color>
     <color name="color_secondary_text_dark">#C4ffffff</color>
     <color name="color_placeholder_text_dark">#737881</color>
+    <color name="color_text_active">#91C4FF</color>
+
     <color name="control_background">#101010</color>
     <color name="progress_track">#4A4458</color>
     <color name="input_bg_dark">#1a1a1a</color>

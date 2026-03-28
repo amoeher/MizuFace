@@ -33,7 +33,7 @@ class FaceBlendshapesResultAdapter :
 
 
     fun updateResults(faceLandmarkerResult: FaceLandmarkerResult? = null) {
-        categories = MutableList(53) { null }
+        categories.fill(null)
         if (faceLandmarkerResult != null && faceLandmarkerResult.faceBlendshapes().isPresent) {
             val detectedFaceBlendshapes = faceLandmarkerResult.faceBlendshapes().get()
             val sortedCategories = detectedFaceBlendshapes[0].sortedByDescending { it.score() }

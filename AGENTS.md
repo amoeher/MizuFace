@@ -11,19 +11,29 @@
 - `app/src/main/java/com/amoherom/mizuface/UDPListner.kt` listens for tracker discovery broadcasts (`"iOSTrackingDataRequest"`) on port `21412`.
 - `app/src/main/java/com/amoherom/mizuface/CameraFov.kt` converts camera metadata into FOV math used for face position estimation.
 - `MainViewModel` stores landmarker thresholds/delegate across fragment recreation; no repository/data layer exists.
+- `app/src/main/java/com/amoherom/mizuface/Blendshape.kt` — enum whose members exactly mirror the keys in `BlenshapeMapper.blendshapeBundle`; not used in the live-stream path but defines the canonical shape vocabulary.
+- `app/src/main/java/com/amoherom/mizuface/BlendshapeRow.kt` — data class `(blendshapeName, blendshapeProgress: ProgressBar, blendshapeWeight: EditText, blendshapeValue: Float)` linking inflated UI rows to per-frame inference values.
+- `app/src/main/java/com/amoherom/mizuface/fragment/FaceBlendshapesResultAdapter.kt` — RecyclerView adapter powering the blendshape debug preview panel; holds a 53-slot `categories` list, sorted by descending score per frame.
+- `app/src/main/java/com/amoherom/mizuface/OverlayView.kt` is a stub (`class OverlayView` with no body); not wired into any layout or use-case.
 
 ## End-to-End Data Flow
 - Camera frames: `ImageAnalysis` (`OUTPUT_IMAGE_FORMAT_RGBA_8888`) -> `detectFace()` -> `FaceLandmarkerHelper.detectLiveStream()`.
 - Inference callback: `VtuberPCFragment.onResults()` computes rotation/position/eye vectors from landmarks + iris points.
 - Blendshape names come from `BlenshapeMapper.blendshapeBundle`; weights are multiplied by per-shape UI values before sending.
-- Payload format: `buildTrackerFaceJson()` emits compact JSON with keys `Timestamp`, `Rotation`, `Position`, `EyeLeft`, `EyeRight`, `BlendShapes`.
+- Payload format: `buildTrackerFaceJson()` emits compact JSON with keys `Timestamp`, `Hotkey` (fixed `-1`), `FaceFound` (fixed `true`), `Rotation`, `Position`, `EyeLeft`, `EyeRight`, `BlendShapes`. Do not remove `Hotkey`/`FaceFound`; VSeeFace/VNyan expect them.
+- `buildJson()` is a thin wrapper that passes through to `buildTrackerFaceJson()`; edit the latter for payload changes.
 - Transport: `DatagramSocket` sends to `PC_IP:PC_PORT` (default port string initialized as `50509`).
+- Default per-shape weight pref value is `"1"` (the `getPref()` fallback), meaning a 1× passthrough when no user edit has been saved.
 
 ## Project-Specific Conventions
 - Preference storage is activity-scoped via `activity?.getPreferences(Context.MODE_PRIVATE)` in `VtuberPCFragment`; keys like `pc_ip`, `pc_port`, `cam_cover_id`, and each blendshape name.
 - UI blendshape rows are created dynamically by inflating `app/src/main/res/layout/blendshape_row.xml` into `blendshapeList`.
 - Navigation fallback pattern: camera permission checks redirect to `PermissionsFragment` both on `onViewCreated` and `onResume`.
 - Naming is inconsistent in legacy code (`BlenshapeMapper`, `UDPListner`, `InitiatePCConnection`); preserve existing names unless refactoring broadly.
+- Blendshape weight editing and IP/Port editing both use the same `AlertDialog` + temporary `EditText` pattern: show dialog, validate input, call `savePref()`, then call `InitiatePCConnection()`. Do not switch to inline EditText editing.
+- IP:Port is entered as a single colon-separated string (`"192.168.1.x:50509"`), validated by regex `^(\d{1,3}(\.\d{1,3}){3})(\s*:\s*\d{1,5})?$` before splitting.
+- `pcLinkState` ImageView cycles through three states: `refreshalt` (searching/discovery), `link` (socket open), `errorlink` (socket failed).
+- Camera cover pref `cam_cover_id` stores `"1"` → animated `idlerec` drawable, `"2"` → solid `cover_solid` drawable.
 
 ## Build/Test/Debug Workflows
 - Windows wrapper is present: `gradlew.bat`; standard Android/Gradle project layout.
@@ -32,10 +42,15 @@
   - `./gradlew.bat :app:assembleDebug`
   - `./gradlew.bat :app:testDebugUnitTest`
   - `./gradlew.bat :app:connectedDebugAndroidTest` (device/emulator required)
+- App version: `versionCode = 2` / `versionName = "2.0"`, `minSdk = 29`, `targetSdk = 35`, `compileSdk = 36`.
+- Both `compose = true` and `viewBinding = true` are declared in `buildFeatures`; the entire UI is XML + ViewBinding — no Compose UI is actually rendered. Do not add Compose UI without aligning the architecture.
 
 ## Integration Notes
 - Model asset path is fixed to `face_landmarker.task` (loaded by `FaceLandmarkerHelper` from app assets).
 - Camera lens switching toggles front/back and recomputes FOV before rebinding use cases.
 - Discovery and streaming are UDP-based; keep protocol compatibility with VSeeFace/VNyan JSON expectations when editing payload keys or units.
 - Manifest currently requests `CAMERA` and `ACCESS_WIFI_STATE`; permission UI only requests camera at runtime.
+- Specific MediaPipe landmark indices used in `onResults()`: nose tip = 1; left eye outer/inner/top/bottom = 33/133/159/145; right eye = 263/362/386/374; left iris = 468; right iris = 473. Face has 478 landmarks total when iris tracking is enabled.
+- Hard-coded motion weights (all in `VtuberPCFragment`): `EYE_WEIGHT = 80`, `HEAD_YAW_WEIGHT = 90/π ≈ 28.6`, `HEAD_PITCH_WEIGHT = 1000/π ≈ 318.3`, `HEAD_ROLL_WEIGHT = 100/π ≈ 31.8`, `CAMERA_FOV_CM = 20f`, `ipdCm = 6.3f`. These are candidates for future global-settings exposure (see roadmap).
+- `FaceLandmarkerHelper.LandmarkerListener` has `onEmpty()` with a default no-op; called when a live-stream frame yields zero face landmarks. `FaceLandmarkerHelper` also contains `detectImage()` / `detectVideoFile()` for `IMAGE`/`VIDEO` modes, but neither is invoked in the current app flow.
 

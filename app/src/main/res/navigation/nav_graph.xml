@@ -8,7 +8,7 @@
     <fragment
         android:id="@+id/permissions_fragment"
         android:name="com.amoherom.mizuface.fragment.PermissionsFragment"
-        android:label="PermissionsFragment">
+        android:label="@string/permissions_fragment_label">
 
         <action
             android:id="@+id/action_permissions_fragment_to_vtuberPCFragment"
@@ -19,7 +19,7 @@
     <fragment
         android:id="@+id/vtuberPCFragment"
         android:name="com.amoherom.mizuface.fragment.VtuberPCFragment"
-        android:label="VtuberPCFragment" >
+        android:label="@string/vtuber_pc_fragment_label" >
         <action
             android:id="@+id/action_vtuberPCFragment_to_permissions_fragment"
             app:destination="@id/permissions_fragment"

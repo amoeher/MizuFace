@@ -24,7 +24,7 @@
             android:layout_marginHorizontal="15dp"
             android:layout_marginTop="15dp"
             android:layout_weight="0"
-            android:text="Name"
+            android:text="@string/blendshape_name"
             android:textSize="20sp"
             android:textColor="@color/color_text_dark"/>
 
@@ -46,7 +46,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Min Value"
+                    android:text="@string/blendshape_min_value"
                     android:layout_marginBottom="5dp"
                     android:textColor="@color/color_placeholder_text_dark"
                     android:labelFor="@id/blendshapeMin"/>
@@ -61,7 +61,7 @@
                     android:inputType="number"
                     android:paddingHorizontal="8dp"
                     android:paddingVertical="4dp"
-                    android:text="0"
+                    android:text="@string/blendshape_zero"
                     android:textColor="@color/color_text_dark"
                     android:textSize="18sp" />
             </LinearLayout>
@@ -76,7 +76,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Max Value"
+                    android:text="@string/blendshape_max_value"
                     android:layout_marginBottom="5dp"
                     android:textColor="@color/color_placeholder_text_dark"
                     android:labelFor="@id/blendshapeMax"/>
@@ -91,7 +91,7 @@
                     android:inputType="number"
                     android:paddingHorizontal="8dp"
                     android:paddingVertical="4dp"
-                    android:text="1"
+                    android:text="@string/blendshape_one"
                     android:textColor="@color/color_text_dark"
                     android:textSize="18sp" />
             </LinearLayout>
@@ -105,7 +105,7 @@
                 <TextView
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Weight"
+                    android:text="@string/blendshape_weight"
                     android:layout_marginBottom="5dp"
                     android:textColor="@color/color_placeholder_text_dark"
                     android:labelFor="@id/blendshapeWeight"/>
@@ -120,7 +120,7 @@
                     android:inputType="number"
                     android:paddingHorizontal="8dp"
                     android:paddingVertical="4dp"
-                    android:text="1"
+                    android:text="@string/blendshape_one"
                     android:textColor="@color/color_text_dark"
                     android:textSize="18sp" />
             </LinearLayout>

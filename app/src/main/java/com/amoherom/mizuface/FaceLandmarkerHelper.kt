@@ -33,6 +33,9 @@ class FaceLandmarkerHelper (
         // If the Face Landmarker will not change, a lazy val would be preferable.
         private var faceLandmarker: FaceLandmarker? = null
 
+        // Reused bitmap buffer to avoid per-frame allocations
+        private var bitmapBuffer: Bitmap? = null
+
         init {
             setupFaceLandmarker()
         }
@@ -141,13 +144,14 @@ class FaceLandmarkerHelper (
             }
             val frameTime = SystemClock.uptimeMillis()
 
-            // Copy out RGB bits from the frame to a bitmap buffer
-            val bitmapBuffer =
-                Bitmap.createBitmap(
-                    imageProxy.width,
-                    imageProxy.height,
-                    Bitmap.Config.ARGB_8888
-                )
+            // Reuse or allocate bitmap buffer
+            val bitmapBuffer = bitmapBuffer?.takeIf {
+                it.width == imageProxy.width && it.height == imageProxy.height
+            } ?: Bitmap.createBitmap(
+                imageProxy.width,
+                imageProxy.height,
+                Bitmap.Config.ARGB_8888
+            ).also { bitmapBuffer = it }
             imageProxy.use { bitmapBuffer.copyPixelsFromBuffer(imageProxy.planes[0].buffer) }
             imageProxy.close()
 

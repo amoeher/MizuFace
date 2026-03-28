@@ -39,21 +39,18 @@
                 android:id="@+id/pc_link_state"
                 android:layout_width="30dp"
                 android:layout_height="50dp"
-                android:contentDescription="Link state icon"
+                android:contentDescription="@string/link_state_icon"
                 app:srcCompat="@drawable/unlink" />
 
-            <EditText
-                android:id="@+id/phoneIpAddress"
+            <TextView
+                android:id="@+id/statusText"
                 android:layout_width="0dp"
                 android:layout_height="wrap_content"
                 android:layout_marginStart="10dp"
                 android:layout_weight="1"
                 android:background="@android:color/transparent"
-                android:cursorVisible="false"
-                android:focusable="false"
-                android:text="192.168.1.3 : 49983"
-                android:autofillHints="pcIPAddress"
-                android:textColor="#353535"
+                android:text="@string/state_disconnected"
+                android:textColor="@color/color_text_dark"
                 android:textSize="20sp" />
 
             <ImageButton
@@ -63,7 +60,7 @@
                 android:layout_marginEnd="0dp"
                 android:background="@android:color/transparent"
 
-                android:contentDescription="retry button"
+                android:contentDescription="@string/retry_button"
                 android:minWidth="40dp"
                 app:layout_constraintEnd_toEndOf="parent"
                 app:srcCompat="@drawable/refreshalt" />
@@ -95,7 +92,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 app:srcCompat="@drawable/cam_cover"
-                android:contentDescription="Idle Rectangle"/>
+                android:contentDescription="@string/idle_rectangle"/>
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -108,7 +105,7 @@
                     android:layout_width="50dp"
                     android:layout_height="50dp"
                     android:background="@android:color/transparent"
-                    android:contentDescription="Change Camera"
+                    android:contentDescription="@string/change_camera"
                     app:srcCompat="@android:drawable/ic_popup_sync" />
 
                 <Space
@@ -122,7 +119,7 @@
                     android:layout_height="50dp"
                     android:layout_weight="0"
                     android:background="@android:color/transparent"
-                    android:contentDescription="Hide the Camera Preview"
+                    android:contentDescription="@string/hide_camera_preview"
                     app:srcCompat="@android:drawable/ic_menu_view" />
 
             </LinearLayout>
@@ -154,14 +151,15 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:fontFamily="sans-serif-black"
-                    android:text="Blendshapes"
+                    android:text="@string/blendshapes"
                     android:textAppearance="@style/TextAppearance.AppCompat.Large"
-                    android:textSize="16sp" />
+                    android:textSize="16sp"
+                    android:textColor="@color/color_text_active"/>
 
                 <ScrollView
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
-                    android:contentDescription="Blenshape List Preview">
+                    android:contentDescription="@string/blendshape_list_preview">
 
                     <LinearLayout
                         android:id="@+id/blendshapeList"
