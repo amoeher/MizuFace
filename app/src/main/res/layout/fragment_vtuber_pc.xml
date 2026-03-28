@@ -146,15 +146,34 @@
                 android:layout_height="match_parent"
                 android:orientation="vertical">
 
-                <TextView
-                    android:id="@+id/textView2"
+                <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:fontFamily="sans-serif-black"
-                    android:text="@string/blendshapes"
-                    android:textAppearance="@style/TextAppearance.AppCompat.Large"
-                    android:textSize="16sp"
-                    android:textColor="@color/color_text_active"/>
+                    android:orientation="horizontal">
+                    <com.amoherom.mizuface.fragment.SelectableText
+                        android:id="@+id/BlendshapeSelector"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/blendshapes"
+                        android:textColor="@color/color_text_dark"
+                        android:textSize="18sp"/>
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/nav_separator"
+                        android:textColor="@color/color_text_dark"
+                        android:layout_marginHorizontal="12sp"
+                        android:textSize="18sp"/>
+
+                    <com.amoherom.mizuface.fragment.SelectableText
+                        android:id="@+id/TrackingSelector"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/tracking"
+                        android:textColor="@color/color_text_dark"
+                        android:textSize="18sp"/>
+                </LinearLayout>
 
                 <ScrollView
                     android:layout_width="match_parent"

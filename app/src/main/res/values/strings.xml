@@ -36,7 +36,10 @@
     <string name="loading">Loading...</string>
 
     <string name="state_connected">Connected</string>
-    <string name="state_connecting">Connecting...</string>
+    <string name="state_connecting">Connecting…</string>
     <string name="state_disconnected">Disconnected</string>
     <string name="state_scanning">Scanning</string>
+
+    <string name="tracking">Tracking</string>
+    <string name="nav_separator">|</string>
 </resources>

@@ -50,6 +50,7 @@ import android.hardware.camera2.CameraCharacteristics
 import android.text.InputType
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
+import android.widget.LinearLayout
 import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat.getSystemService
 import androidx.core.view.isVisible
@@ -220,6 +221,15 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
         return distanceCmFiltered
     }
 
+    private fun ShowBlendshapes(){
+        binding.BlendshapeSelector.isSelected = true
+        binding.TrackingSelector.isSelected = false
+    }
+
+    private fun ShowTrackingSettings(){
+        binding.BlendshapeSelector.isSelected = false
+        binding.TrackingSelector.isSelected = true
+    }
     @SuppressLint("MissingPermission")
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
@@ -232,6 +242,11 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
             requireActivity().findNavController(R.id.fragment_container).navigate(R.id.action_vtuberPCFragment_to_permissions_fragment)
             return
         }
+
+        ShowBlendshapes()
+
+        binding.BlendshapeSelector.setOnClickListener { ShowBlendshapes() }
+        binding.TrackingSelector.setOnClickListener { ShowTrackingSettings() }
 
         binding.viewFinder.post{
             setUpCamera()
@@ -264,6 +279,7 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
                 val blendshapeName = itemView.findViewById<TextView>(R.id.blendshapeName)
                 val progressBar = itemView.findViewById<ProgressBar>(R.id.blendshapeProgress)
                 val editText = itemView.findViewById<EditText>(R.id.blendshapeWeight)
+                val settings = itemView.findViewById<LinearLayout>(R.id.settings)
 
                 val savedWeight = getPref(name)
                 blendshapeName.text = name
@@ -274,10 +290,19 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
                     blendshapeName = name,
                     blendshapeProgress = progressBar,
                     blendshapeWeight = editText,
-                    cachedMultiplier = savedWeight.toFloatOrNull() ?: 1f
+                    cachedMultiplier = savedWeight.toFloatOrNull() ?: 1f,
+                    settings = settings
                 )
                 blendshapeRowsList.add(row)
                 container.addView(itemView)
+
+                itemView.setOnClickListener {
+                    settings.visibility = if (settings.visibility == View.VISIBLE) {
+                        View.GONE
+                    } else {
+                        View.VISIBLE
+                    }
+                }
             }
 
             blendshapeRows = blendshapeRowsList
