@@ -95,6 +95,7 @@
             android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_weight="1"
+            android:orientation="vertical"
             android:visibility="gone"/>
 
         <androidx.cardview.widget.CardView
@@ -243,9 +244,10 @@
                         app:alignItems="center">
 
                         <ImageButton
-                            android:id="@+id/imageButton"
+                            android:id="@+id/powerButton"
                             android:layout_width="110dp"
                             android:layout_height="110dp"
+                            android:contentDescription="@string/tracking_on_off"
                             app:srcCompat="@drawable/power"
                             android:background="@drawable/rounded_bg"
                             android:layout_margin="5dp"/>
@@ -254,15 +256,15 @@
                             android:id="@+id/eye_track"
                             android:layout_width="110dp"
                             android:layout_height="110dp"
-                            android:text="Track Eyes"
+                            android:text="@string/track_eyes"
                             android:background="@drawable/rounded_bg"
                             android:layout_margin="5dp"/>
 
                         <Button
-                            android:id="@+id/blink"
+                            android:id="@+id/fcl_blink"
                             android:layout_width="110dp"
                             android:layout_height="110dp"
-                            android:text="Auto Blink"
+                            android:text="@string/auto_blink"
                             android:background="@drawable/rounded_bg"
                             android:layout_margin="5dp" />
 
@@ -270,7 +272,7 @@
                             android:id="@+id/exp_happy"
                             android:layout_width="110dp"
                             android:layout_height="110dp"
-                            android:text="Happy"
+                            android:text="@string/happy"
                             android:background="@drawable/rounded_bg"
                             android:layout_margin="5dp"
                             app:backgroundTint="@null"/>
@@ -279,7 +281,7 @@
                             android:id="@+id/exp_sad"
                             android:layout_width="110dp"
                             android:layout_height="110dp"
-                            android:text="Sad"
+                            android:text="@string/sad"
                             android:background="@drawable/rounded_bg"
                             android:layout_margin="5dp"
                             app:backgroundTint="@null"/>
@@ -288,7 +290,7 @@
                             android:id="@+id/exp_angry"
                             android:layout_width="110dp"
                             android:layout_height="110dp"
-                            android:text="Angry"
+                            android:text="@string/angry"
                             android:background="@drawable/rounded_bg"
                             android:layout_margin="5dp"
                             app:backgroundTint="@null"/>
@@ -297,7 +299,7 @@
                             android:id="@+id/exp_surprise"
                             android:layout_width="110dp"
                             android:layout_height="110dp"
-                            android:text="Surprise"
+                            android:text="@string/surprise"
                             android:background="@drawable/rounded_bg"
                             android:layout_margin="5dp"
                             app:backgroundTint="@null"/>

@@ -45,4 +45,11 @@
     <string name="controls">Controls</string>
     <string name="tracking_settings_panel">Tracking Settings Panel</string>
     <string name="tracking_control_panel">Tracking Control Panel</string>
+    <string name="surprise">Surprise</string>
+    <string name="angry">Angry</string>
+    <string name="sad">Sad</string>
+    <string name="happy">Happy</string>
+    <string name="auto_blink">Auto Blink</string>
+    <string name="track_eyes">Track Eyes</string>
+    <string name="tracking_on_off">Tracking On/Off</string>
 </resources>

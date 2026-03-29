@@ -745,8 +745,6 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
     override fun onResults(resultBundle: FaceLandmarkerHelper.ResultBundle) {
         if (_binding == null) return
 
-        val shouldUpdateUi = (++frameCount % UI_UPDATE_INTERVAL) == 0
-
         // FPS counter — sample once per second
         fpsFrameCount++
         val nowMs = System.currentTimeMillis()
@@ -777,7 +775,7 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
         val leftEyeBOTTOM = firstFace.getOrNull(145)
 
         val leftIrisLandmarkIndex = firstFace.getOrNull(468)
-        val leftIrisx = leftIrisLandmarkIndex?.x()?.toFloat() ?: 0f
+        val leftIrisx = leftIrisLandmarkIndex?.x() ?: 0f
 
         val rightEyeLandmarkIndex = firstFace.getOrNull(263)
         val rightEyeLEFT = firstFace.getOrNull(362)
@@ -786,7 +784,7 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
         val rightEyeBOTTOM = firstFace.getOrNull(374)
 
         val rightIrisLandmarkIndex = firstFace.getOrNull(473)
-        val rightIrisx = rightIrisLandmarkIndex?.x()?.toFloat() ?: 0f
+        val rightIrisx = rightIrisLandmarkIndex?.x() ?: 0f
 
         val (eyeLX, eyeLY) = if (
             leftIrisLandmarkIndex != null &&
@@ -830,9 +828,9 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
             -roll * HEAD_ROLL_WEIGHT,
         )
 
-        var facePosX = (0.5f - (noseLandmarkindex?.x()?.toFloat() ?: 0f)) * CAMERA_FOV_CM
-        var facePosY = (0.5f - (noseLandmarkindex?.y()?.toFloat() ?: 0f)) * CAMERA_FOV_CM
-        var facePosZ = (0.5f - (noseLandmarkindex?.z()?.toFloat() ?: 0f)) * CAMERA_FOV_CM
+        var facePosX = (0.5f - (noseLandmarkindex?.x() ?: 0f)) * CAMERA_FOV_CM
+        var facePosY = (0.5f - (noseLandmarkindex?.y() ?: 0f)) * CAMERA_FOV_CM
+        var facePosZ = (0.5f - (noseLandmarkindex?.z() ?: 0f)) * CAMERA_FOV_CM
 
         val f = fov
         val facePosition = if (
@@ -844,8 +842,8 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
             val distanceCm = estimateDistanceFromEyes(leftIrisx, rightIrisx)
             val wCm = CameraFov.widthAtDistance(distanceCm, f)
             val hCm = CameraFov.heightAtDistance(distanceCm, f)
-            val nx = noseLandmarkindex.x().toFloat()
-            val ny = noseLandmarkindex.y().toFloat()
+            val nx = noseLandmarkindex.x()
+            val ny = noseLandmarkindex.y()
 
             facePosX = ((0.5f - nx) * wCm).toFloat()
             facePosY = ((0.5f - ny) * hCm).toFloat()
@@ -863,29 +861,27 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
                 it.categoryName() to it.score()
             }.toMutableMap()
 
-            val progressByBlendshape = if (shouldUpdateUi) mutableMapOf<String, Int>() else null
+            val progressByBlendshape = mutableMapOf<String, Int>()
             for (row in blendshapeRows) {
                 val name = row.blendshapeName
                 val score = weightedBlendshapesMap[name] ?: 0f
                 row.blendshapeValue = score
 
-                if (progressByBlendshape != null) {
-                    progressByBlendshape[name] = (score * 100).toInt().coerceIn(0, 100)
-                }
+                progressByBlendshape[name] = (score * 100).toInt().coerceIn(0, 100)
 
                 weightedBlendshapesMap[name] = score * row.cachedMultiplier
             }
 
             sendBlendshapesToPC(weightedBlendshapesMap, faceRotation, facePosition, eyeLeft, eyeRight)
 
-            if (shouldUpdateUi) {
+            if (isBlendshapesVisible) {
                 activity?.runOnUiThread {
                     if (_binding == null) return@runOnUiThread
 
                     faceBlendshapesResultAdapter.updateResults(resultBundle.result)
                     faceBlendshapesResultAdapter.notifyDataSetChanged()
 
-                    progressByBlendshape?.let { progressMap ->
+                    progressByBlendshape.let { progressMap ->
                         for (row in blendshapeRows) {
                             row.blendshapeProgress.progress = progressMap[row.blendshapeName] ?: 0
                         }
