@@ -2,7 +2,9 @@ package com.amoherom.mizuface
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.graphics.Matrix
+import android.graphics.RectF
 import android.media.MediaMetadataRetriever
 import android.net.Uri
 import android.os.SystemClock
@@ -22,7 +24,7 @@ class FaceLandmarkerHelper (
     var minFaceTrackingConfidence: Float = DEFAULT_FACE_TRACKING_CONFIDENCE,
     var minFacePresenceConfidence: Float = DEFAULT_FACE_PRESENCE_CONFIDENCE,
     var maxNumFaces: Int = DEFAULT_NUM_FACES,
-    var currentDelegate: Int = DELEGATE_CPU,
+    var currentDelegate: Int = DELEGATE_GPU,
     var runningMode: RunningMode = RunningMode.IMAGE,
     val context: Context,
     // this listener is only used when running in RunningMode.LIVE_STREAM
@@ -35,6 +37,8 @@ class FaceLandmarkerHelper (
 
         // Reused bitmap buffer to avoid per-frame allocations
         private var bitmapBuffer: Bitmap? = null
+    
+        private var rotatedBitmap: Bitmap? = null
 
         init {
             setupFaceLandmarker()
@@ -169,13 +173,27 @@ class FaceLandmarkerHelper (
                     )
                 }
             }
-            val rotatedBitmap = Bitmap.createBitmap(
-                bitmapBuffer, 0, 0, bitmapBuffer.width, bitmapBuffer.height,
-                matrix, true
-            )
+            // Compute the bounding box of the transformed source to derive output dimensions
+            val srcRect = RectF(0f, 0f, bitmapBuffer.width.toFloat(), bitmapBuffer.height.toFloat())
+            val dstRect = RectF()
+            matrix.mapRect(dstRect, srcRect)
+            val outWidth = dstRect.width().toInt()
+            val outHeight = dstRect.height().toInt()
+
+            // Shift the matrix so all rotated pixels land in positive coordinate space
+            matrix.postTranslate(-dstRect.left, -dstRect.top)
+
+            // Reuse the rotated bitmap; only reallocate when dimensions change (e.g. camera switch)
+            val rotated = rotatedBitmap?.takeIf {
+                it.width == outWidth && it.height == outHeight
+            } ?: Bitmap.createBitmap(outWidth, outHeight, Bitmap.Config.ARGB_8888)
+                .also { rotatedBitmap = it }
+
+            // Draw bitmapBuffer into the reused rotated bitmap each frame (no new allocation)
+            Canvas(rotated).drawBitmap(bitmapBuffer, matrix, null)
 
             // Convert the input Bitmap object to an MPImage object to run inference
-            val mpImage = BitmapImageBuilder(rotatedBitmap).build()
+            val mpImage = BitmapImageBuilder(rotated).build()
 
             detectAsync(mpImage, frameTime)
         }

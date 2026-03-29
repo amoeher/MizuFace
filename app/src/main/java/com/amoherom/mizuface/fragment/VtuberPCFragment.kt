@@ -66,6 +66,7 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
 
     private var PC_IP: String = "0.0.0.0"
     private var PC_PORT: String = "50509" // VSeeFace 50509  Vnyan 50509
+    private var cachedInetAddress: InetAddress? = null
 
     private var EYE_WEIGHT = 80 // This is the weight for eye tracking, can be adjusted
     private var HEAD_PICH_WEIGHT = 1000f / Math.PI.toFloat() // This is the weight for head pitch tracking, can be adjusted
@@ -109,8 +110,7 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
     // Persistent IO scope - avoids creating a new CoroutineScope every frame
     private var ioScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
-    // Frame counter used to throttle UI updates
-    private var frameCount = 1
+    private var isDetectionOn = true
 
     // FPS tracking
     private var fpsFrameCount = 0
@@ -134,11 +134,13 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
             ).navigate(R.id.action_vtuberPCFragment_to_permissions_fragment)
         }
 
-        // Start the FaceLandmarkerHelper again when users come back
-        // to the foreground.
-        backgroundExecutor.execute {
-            if (faceLandmarkerHelper.isClose()) {
-                faceLandmarkerHelper.setupFaceLandmarker()
+        if (isDetectionOn) {
+            // Start the FaceLandmarkerHelper again when users come back
+            // to the foreground.
+            backgroundExecutor.execute {
+                if (faceLandmarkerHelper.isClose()) {
+                    faceLandmarkerHelper.setupFaceLandmarker()
+                }
             }
         }
     }
@@ -271,6 +273,26 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
         binding.trackingSettingsView.visibility = View.GONE
     }
 
+    private fun toggleDetectionState(){
+        isDetectionOn = !isDetectionOn
+
+        if (isDetectionOn) {
+            backgroundExecutor.execute {
+                if (faceLandmarkerHelper.isClose()) {
+                    faceLandmarkerHelper.setupFaceLandmarker()
+                }
+            }
+            imageAnalyzer?.setAnalyzer(backgroundExecutor) { image ->
+                detectFace(image)
+            }
+
+            binding.powerButton.setImageResource(R.drawable.power)
+        }
+        else{
+            binding.powerButton.setImageResource(R.drawable.power_off)
+        }
+    }
+
     @SuppressLint("MissingPermission")
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
@@ -308,21 +330,25 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
         binding.TrackingSelector.setOnClickListener { showTrackingSettings() }
         binding.ControlsSelector.setOnClickListener { showControls() }
 
+        binding.powerButton.setOnClickListener { toggleDetectionState() }
+
         binding.viewFinder.post{
             setUpCamera()
         }
 
-        backgroundExecutor.execute {
-            faceLandmarkerHelper = FaceLandmarkerHelper(
-                context = requireContext(),
-                runningMode = RunningMode.LIVE_STREAM,
-                minFaceDetectionConfidence = viewModel.currentMinFaceDetectionConfidence,
-                minFaceTrackingConfidence = viewModel.currentMinFaceTrackingConfidence,
-                minFacePresenceConfidence = viewModel.currentMinFacePresenceConfidence,
-                maxNumFaces = viewModel.currentMaxFaces,
-                currentDelegate = viewModel.currentDelegate,
-                faceLandmarkerHelperListener = this
-            )
+        if(isDetectionOn) {
+            backgroundExecutor.execute {
+                faceLandmarkerHelper = FaceLandmarkerHelper(
+                    context = requireContext(),
+                    runningMode = RunningMode.LIVE_STREAM,
+                    minFaceDetectionConfidence = viewModel.currentMinFaceDetectionConfidence,
+                    minFaceTrackingConfidence = viewModel.currentMinFaceTrackingConfidence,
+                    minFacePresenceConfidence = viewModel.currentMinFacePresenceConfidence,
+                    maxNumFaces = viewModel.currentMaxFaces,
+                    currentDelegate = viewModel.currentDelegate,
+                    faceLandmarkerHelperListener = this
+                )
+            }
         }
 
         // Defer row inflation to after the first render so the camera preview appears immediately
@@ -546,6 +572,8 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
             }
             val localIp = getLocalIPAddress() ?: getString(R.string.unknown_ip)
             val ipState = getString(R.string.phone_ip_state, localIp, PC_PORT)
+            cachedInetAddress = InetAddress.getByName(PC_IP)
+
             activity?.runOnUiThread {
                 binding.pcLinkState.setImageResource(R.drawable.link_connected)
                 binding.statusText.setText(R.string.state_connected)
@@ -589,13 +617,29 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
         if (isLookingForPc){
             return
         }
+        val addr = cachedInetAddress ?: return
+
+        // FPS counter — sample once per second
+        fpsFrameCount++
+        val nowMs = System.currentTimeMillis()
+        if (fpsLastTimestampMs == 0L) fpsLastTimestampMs = nowMs
+        val elapsedMs = nowMs - fpsLastTimestampMs
+        if (elapsedMs >= 1000L) {
+            val fps = (fpsFrameCount * 1000L / elapsedMs).toInt()
+            fpsFrameCount = 0
+            fpsLastTimestampMs = nowMs
+            activity?.runOnUiThread {
+                if (_binding != null) binding.fpsCounter.text = fps.toString()
+            }
+        }
+
         ioScope.launch {
             val json = buildJson(blendshapes, Position, Rotation, eyeLeft, eyeRight)
             val buffer = json.toByteArray(Charsets.UTF_8)
             val packet = DatagramPacket(
                 buffer,
                 buffer.size,
-                InetAddress.getByName(PC_IP),
+                addr,
                 PC_PORT.toInt()
             )
 
@@ -710,6 +754,10 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
     }
 
     private fun detectFace(imageProxy: ImageProxy) {
+        if (!isDetectionOn){
+            imageProxy.close()
+            return
+        }
         faceLandmarkerHelper.detectLiveStream(
             imageProxy = imageProxy,
             isFrontCamera = cameraFacing == CameraSelector.LENS_FACING_FRONT
@@ -745,19 +793,6 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
     override fun onResults(resultBundle: FaceLandmarkerHelper.ResultBundle) {
         if (_binding == null) return
 
-        // FPS counter — sample once per second
-        fpsFrameCount++
-        val nowMs = System.currentTimeMillis()
-        if (fpsLastTimestampMs == 0L) fpsLastTimestampMs = nowMs
-        val elapsedMs = nowMs - fpsLastTimestampMs
-        if (elapsedMs >= 1000L) {
-            val fps = (fpsFrameCount * 1000L / elapsedMs).toInt()
-            fpsFrameCount = 0
-            fpsLastTimestampMs = nowMs
-            activity?.runOnUiThread {
-                if (_binding != null) binding.fpsCounter.text = fps.toString()
-            }
-        }
         val blendshapes = resultBundle.result.faceBlendshapes()
         val faceLandmarks = resultBundle.result.faceLandmarks()
         val firstFace = faceLandmarks.firstOrNull()
