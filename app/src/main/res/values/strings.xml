@@ -36,7 +36,21 @@
     <string name="loading">Loading...</string>
 
     <string name="state_connected">Connected</string>
-    <string name="state_connecting">Connecting...</string>
+    <string name="state_connecting">Connecting…</string>
     <string name="state_disconnected">Disconnected</string>
     <string name="state_scanning">Scanning</string>
+
+    <string name="tracking">Tracking</string>
+    <string name="nav_separator">|</string>
+    <string name="controls">Controls</string>
+    <string name="tracking_settings_panel">Tracking Settings Panel</string>
+    <string name="tracking_control_panel">Tracking Control Panel</string>
+    <string name="surprise">Surprise</string>
+    <string name="angry">Angry</string>
+    <string name="sad">Sad</string>
+    <string name="happy">Happy</string>
+    <string name="auto_blink">Auto Blink</string>
+    <string name="track_eyes">Track Eyes</string>
+    <string name="tracking_on_off">Tracking On/Off</string>
+    <string name="more_settings">More Settings</string>
 </resources>

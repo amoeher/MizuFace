@@ -22,8 +22,6 @@ import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
 import androidx.navigation.Navigation
-import androidx.recyclerview.widget.LinearLayoutManager
-import androidx.recyclerview.widget.RecyclerView
 import com.amoherom.mizuface.FaceLandmarkerHelper
 import com.amoherom.mizuface.MainViewModel
 import com.amoherom.mizuface.R
@@ -37,29 +35,31 @@ import kotlinx.coroutines.launch
 import java.net.DatagramPacket
 import java.net.DatagramSocket
 import java.net.InetAddress
-import java.nio.charset.Charset
+import java.text.DecimalFormat
+import java.text.DecimalFormatSymbols
 import java.util.Locale
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import androidx.navigation.findNavController
 import com.amoherom.mizuface.BlendshapeRow
 import com.amoherom.mizuface.BlenshapeMapper
-import com.google.mediapipe.tasks.vision.facelandmarker.FaceLandmarkerResult
 import java.net.NetworkInterface
 import android.hardware.camera2.CameraCharacteristics
 import android.text.InputType
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputMethodManager
+import android.widget.LinearLayout
 import androidx.camera.view.PreviewView
-import androidx.core.content.ContextCompat.getSystemService
 import androidx.core.view.isVisible
-import androidx.core.widget.doOnTextChanged
 import com.amoherom.mizuface.CameraFov
 import com.amoherom.mizuface.UDPListner
 import kotlin.math.abs
 import kotlin.math.atan
 import kotlin.math.tan
-import org.json.JSONObject
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.updatePadding
+
 
 class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
 
@@ -68,6 +68,7 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
 
     private var PC_IP: String = "0.0.0.0"
     private var PC_PORT: String = "50509" // VSeeFace 50509  Vnyan 50509
+    private var cachedInetAddress: InetAddress? = null
 
     private var EYE_WEIGHT = 80 // This is the weight for eye tracking, can be adjusted
     private var HEAD_PICH_WEIGHT = 1000f / Math.PI.toFloat() // This is the weight for head pitch tracking, can be adjusted
@@ -82,6 +83,8 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
     companion object {
         private const val TAG = "MIZU"
         private const val UI_UPDATE_INTERVAL = 1 // update progress bars every 3rd frame
+        // Compiled once — not re-created on every dialog click
+        private val IP_PORT_REGEX = Regex("""^(\d{1,3}(\.\d{1,3}){3})(\s*:\s*\d{1,5})?$""")
     }
 
     private var _binding: FragmentVtuberPcBinding? = null
@@ -111,26 +114,54 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
     // Persistent IO scope - avoids creating a new CoroutineScope every frame
     private var ioScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
-    // Frame counter used to throttle UI updates
-    private var frameCount = 1
+    // Pre-allocated maps for onResults() — inference callback is single-threaded,
+    // so these are safe to reuse without locking.
+    private val reusedWeightedMap = HashMap<String, Float>(64)
+    private val reusedProgressMap = HashMap<String, Int>(64)
+
+    // Cached port as Int — updated once in InitiatePCConnection, read every frame.
+    private var pcPortInt: Int = 50509
+
+    // Pre-allocated DatagramPacket — avoids one object allocation per frame.
+    // Only touched inside the ioScope launch which is effectively serialised by
+    // STRATEGY_KEEP_ONLY_LATEST (at most one outstanding send at a time).
+    private val sendPacket = DatagramPacket(ByteArray(1), 1)
+
+    // ThreadLocal JSON utilities — thread-safe for coroutines on Dispatchers.IO.
+    private val jsonSb = ThreadLocal.withInitial { StringBuilder(2048) }
+    private val jsonFmt = ThreadLocal.withInitial {
+        DecimalFormat("0.00000000", DecimalFormatSymbols(Locale.US))
+    }
+
+    private var isDetectionOn = true
+
+    // FPS tracking
+    private var fpsFrameCount = 0
+    private var fpsLastTimestampMs = 0L
 
     private var isLookingForPc = false
 
+    private var isControlsVisible = true
+
+    private var isBlendshapesVisible = false
+
+    private var isTrackingSettingsVisible = false
+    
     override fun onResume() {
         super.onResume()
         // Make sure that all permissions are still present, since the
         // user could have removed them while the app was in paused state.
         if (!PermissionsFragment.hasPermissions(requireContext())) {
-            Navigation.findNavController(
-                requireActivity(), R.id.fragment_container
-            ).navigate(R.id.action_vtuberPCFragment_to_permissions_fragment)
+            requireActivity().findNavController(R.id.fragment_container).navigate(R.id.action_vtuberPCFragment_to_permissions_fragment)
         }
 
-        // Start the FaceLandmarkerHelper again when users come back
-        // to the foreground.
-        backgroundExecutor.execute {
-            if (faceLandmarkerHelper.isClose()) {
-                faceLandmarkerHelper.setupFaceLandmarker()
+        if (isDetectionOn) {
+            // Start the FaceLandmarkerHelper again when users come back
+            // to the foreground.
+            backgroundExecutor.execute {
+                if (faceLandmarkerHelper.isClose()) {
+                    faceLandmarkerHelper.setupFaceLandmarker()
+                }
             }
         }
     }
@@ -163,7 +194,7 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
                 val enumIpAddr = intf.inetAddresses
                 while (enumIpAddr.hasMoreElements()) {
                     val inetAddress = enumIpAddr.nextElement()
-                    if (!inetAddress.isLoopbackAddress && inetAddress.hostAddress.indexOf(':') < 0) {
+                    if (!inetAddress.isLoopbackAddress && inetAddress?.hostAddress?.indexOf(':')!! < 0) {
                         return ipToString(inetAddress.hashCode())
                     }
                 }
@@ -174,6 +205,7 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
         }
         return null
     }
+
 
     private fun ipToString(ip: Int): String {
         return String.format(
@@ -220,6 +252,62 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
         return distanceCmFiltered
     }
 
+    private fun showBlendshapes(){
+        binding.BlendshapeSelector.isSelected = true
+        binding.TrackingSelector.isSelected = false
+        binding.ControlsSelector.isSelected = false
+        isBlendshapesVisible = true
+        isTrackingSettingsVisible = false
+        isControlsVisible = false
+        binding.blendshapeScrollView.visibility = View.VISIBLE
+        binding.controlPanelView.visibility = View.GONE
+        binding.trackingSettingsView.visibility = View.GONE
+    }
+
+    private fun showTrackingSettings(){
+        binding.BlendshapeSelector.isSelected = false
+        binding.TrackingSelector.isSelected = true
+        binding.ControlsSelector.isSelected = false
+        isBlendshapesVisible = false
+        isTrackingSettingsVisible = true
+        isControlsVisible = false
+        binding.blendshapeScrollView.visibility = View.GONE
+        binding.controlPanelView.visibility = View.GONE
+        binding.trackingSettingsView.visibility = View.VISIBLE
+    }
+
+    private fun showControls(){
+        binding.BlendshapeSelector.isSelected = false
+        binding.TrackingSelector.isSelected = false
+        binding.ControlsSelector.isSelected = true
+        isBlendshapesVisible = false
+        isTrackingSettingsVisible = false
+        isControlsVisible = true
+        binding.blendshapeScrollView.visibility = View.GONE
+        binding.controlPanelView.visibility = View.VISIBLE
+        binding.trackingSettingsView.visibility = View.GONE
+    }
+
+    private fun toggleDetectionState(){
+        isDetectionOn = !isDetectionOn
+
+        if (isDetectionOn) {
+            backgroundExecutor.execute {
+                if (faceLandmarkerHelper.isClose()) {
+                    faceLandmarkerHelper.setupFaceLandmarker()
+                }
+            }
+            imageAnalyzer?.setAnalyzer(backgroundExecutor) { image ->
+                detectFace(image)
+            }
+
+            binding.powerButton.setImageResource(R.drawable.power)
+        }
+        else{
+            binding.powerButton.setImageResource(R.drawable.power_off)
+        }
+    }
+
     @SuppressLint("MissingPermission")
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
@@ -227,32 +315,61 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
         ioScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
         backgroundExecutor = Executors.newSingleThreadExecutor()
 
+        // Correct - shrinks the whole layout so the ScrollView's bottom edge lifts above the keyboard
+        ViewCompat.setOnApplyWindowInsetsListener(binding.root) { v, insets ->
+            val imeHeight = insets.getInsets(WindowInsetsCompat.Type.ime()).bottom
+            val navBarHeight = insets.getInsets(WindowInsetsCompat.Type.navigationBars()).bottom
+            val keyboardOpen = imeHeight > navBarHeight
+            v.updatePadding(bottom = (imeHeight - navBarHeight).coerceAtLeast(0))
+            // Scroll AFTER layout has resized, not before keyboard appears
+            if (keyboardOpen) {
+                binding.blendshapeScrollView.post {
+                    binding.blendshapeScrollView.findFocus()?.let { focused ->
+                        val rect = android.graphics.Rect(0, 0, focused.width, focused.height)
+                        focused.requestRectangleOnScreen(rect, false)
+                    }
+                }
+            }
+            insets
+        }
+
         // Check permissions before setting up camera
         if (!PermissionsFragment.hasPermissions(requireContext())) {
             requireActivity().findNavController(R.id.fragment_container).navigate(R.id.action_vtuberPCFragment_to_permissions_fragment)
             return
         }
 
+        showBlendshapes()
+
+        binding.BlendshapeSelector.setOnClickListener { showBlendshapes() }
+        binding.TrackingSelector.setOnClickListener { showTrackingSettings() }
+        binding.ControlsSelector.setOnClickListener { showControls() }
+
+        binding.powerButton.setOnClickListener { toggleDetectionState() }
+
         binding.viewFinder.post{
             setUpCamera()
         }
 
-        backgroundExecutor.execute {
-            faceLandmarkerHelper = FaceLandmarkerHelper(
-                context = requireContext(),
-                runningMode = RunningMode.LIVE_STREAM,
-                minFaceDetectionConfidence = viewModel.currentMinFaceDetectionConfidence,
-                minFaceTrackingConfidence = viewModel.currentMinFaceTrackingConfidence,
-                minFacePresenceConfidence = viewModel.currentMinFacePresenceConfidence,
-                maxNumFaces = viewModel.currentMaxFaces,
-                currentDelegate = viewModel.currentDelegate,
-                faceLandmarkerHelperListener = this
-            )
+        if(isDetectionOn) {
+            backgroundExecutor.execute {
+                faceLandmarkerHelper = FaceLandmarkerHelper(
+                    context = requireContext(),
+                    runningMode = RunningMode.LIVE_STREAM,
+                    minFaceDetectionConfidence = viewModel.currentMinFaceDetectionConfidence,
+                    minFaceTrackingConfidence = viewModel.currentMinFaceTrackingConfidence,
+                    minFacePresenceConfidence = viewModel.currentMinFacePresenceConfidence,
+                    maxNumFaces = viewModel.currentMaxFaces,
+                    currentDelegate = viewModel.currentDelegate,
+                    faceLandmarkerHelperListener = this
+                )
+            }
         }
 
         // Defer row inflation to after the first render so the camera preview appears immediately
         view.post {
             if (_binding == null) return@post
+            if (!isBlendshapesVisible) return@post
             val container = binding.blendshapeList
             val rowInflater = LayoutInflater.from(requireContext())
             val blendShapesList = BlenshapeMapper.blendshapeBundle.map { it.first }
@@ -264,6 +381,7 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
                 val blendshapeName = itemView.findViewById<TextView>(R.id.blendshapeName)
                 val progressBar = itemView.findViewById<ProgressBar>(R.id.blendshapeProgress)
                 val editText = itemView.findViewById<EditText>(R.id.blendshapeWeight)
+                val settings = itemView.findViewById<LinearLayout>(R.id.settings)
 
                 val savedWeight = getPref(name)
                 blendshapeName.text = name
@@ -274,39 +392,51 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
                     blendshapeName = name,
                     blendshapeProgress = progressBar,
                     blendshapeWeight = editText,
-                    cachedMultiplier = savedWeight.toFloatOrNull() ?: 1f
+                    cachedMultiplier = savedWeight.toFloatOrNull() ?: 1f,
+                    settings = settings
                 )
                 blendshapeRowsList.add(row)
                 container.addView(itemView)
+
+                itemView.setOnClickListener {
+                    settings.visibility = if (settings.visibility == View.VISIBLE) {
+                        View.GONE
+                    } else {
+                        View.VISIBLE
+                    }
+                }
             }
 
             blendshapeRows = blendshapeRowsList
 
             for (row in blendshapeRows) {
                 row.blendshapeWeight.inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
-
-                row.blendshapeWeight.setOnClickListener {
-                    val editTextd = EditText(requireContext())
-                    editTextd.setText("${row.blendshapeWeight.text}")
-                    editTextd.setSelection(editTextd.text.length)
-
-                    val dialog = androidx.appcompat.app.AlertDialog.Builder(requireContext())
-                        .setTitle(getString(R.string.edit_weight_for, row.blendshapeName))
-                        .setView(editTextd)
-                        .setPositiveButton(getString(R.string.dialog_ok)) { _, _ ->
-                            val text = editTextd.text.toString()
-                            if (editTextd.text.isNullOrEmpty() || text.toFloatOrNull() == null) {
-                                Toast.makeText(requireContext(), getString(R.string.blendshape_weight_not_valid), Toast.LENGTH_SHORT).show()
-                                return@setPositiveButton
-                            }
+                row.blendshapeWeight.setOnEditorActionListener { _, actionId, _ ->
+                    if (actionId == EditorInfo.IME_ACTION_DONE) {
+                        val text = row.blendshapeWeight.text.toString()
+                        val value = text.toFloatOrNull()
+                        if (value == null) {
+                            Toast.makeText(requireContext(), getString(R.string.blendshape_weight_not_valid), Toast.LENGTH_SHORT).show()
+                        } else {
                             savePref(row.blendshapeName, text)
-                            row.blendshapeWeight.setText(text)
-                            row.cachedMultiplier = text.toFloat()
+                            row.cachedMultiplier = value
                             InitiatePCConnection()
                         }
-                        .setNegativeButton(getString(R.string.dialog_cancel), null)
-                        .create()
-                    dialog.show()
+                        val imm = requireContext().getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+                        imm.hideSoftInputFromWindow(row.blendshapeWeight.windowToken, 0)
+                        row.blendshapeWeight.clearFocus()
+                        true
+                    } else false
+                }
+
+                row.blendshapeWeight.setOnFocusChangeListener { v, hasFocus ->
+                    if (!hasFocus) {
+                        val text = row.blendshapeWeight.text.toString()
+                        val value = text.toFloatOrNull() ?: return@setOnFocusChangeListener
+                        savePref(row.blendshapeName, text)
+                        row.cachedMultiplier = value
+                        InitiatePCConnection()
+                    }
                 }
             }
 
@@ -332,8 +462,7 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
                 .setView(editText)
                 .setPositiveButton(getString(R.string.dialog_ok)) { _, _ ->
                     val text = editText.text.toString()
-                    val ipPortRegex = Regex("""^(\d{1,3}(\.\d{1,3}){3})(\s*:\s*\d{1,5})?$""")
-                    if (!ipPortRegex.matches(text.trim())) {
+                    if (!IP_PORT_REGEX.matches(text.trim())) {
                         Toast.makeText(requireContext(), getString(R.string.invalid_ip_address_format), Toast.LENGTH_SHORT).show()
                         return@setPositiveButton
                     }
@@ -451,12 +580,15 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
 
         try {
             pcSocket = DatagramSocket()
+            pcPortInt = PC_PORT.toIntOrNull() ?: 50509  // cache once; read every frame
             activity?.runOnUiThread {
                 binding.pcLinkState.setImageResource(R.drawable.connecting)
                 binding.statusText.setText(R.string.state_connecting)
             }
             val localIp = getLocalIPAddress() ?: getString(R.string.unknown_ip)
             val ipState = getString(R.string.phone_ip_state, localIp, PC_PORT)
+            cachedInetAddress = InetAddress.getByName(PC_IP)
+
             activity?.runOnUiThread {
                 binding.pcLinkState.setImageResource(R.drawable.link_connected)
                 binding.statusText.setText(R.string.state_connected)
@@ -500,16 +632,25 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
         if (isLookingForPc){
             return
         }
+        val addr = cachedInetAddress ?: return
+
+        // FPS counter — sample once per second
+        fpsFrameCount++
+        val nowMs = System.currentTimeMillis()
+        if (fpsLastTimestampMs == 0L) fpsLastTimestampMs = nowMs
+        val elapsedMs = nowMs - fpsLastTimestampMs
+        if (elapsedMs >= 1000L) {
+            val fps = (fpsFrameCount * 1000L / elapsedMs).toInt()
+            fpsFrameCount = 0
+            fpsLastTimestampMs = nowMs
+            activity?.runOnUiThread {
+                if (_binding != null) binding.fpsCounter.text = fps.toString()
+            }
+        }
+
         ioScope.launch {
             val json = buildJson(blendshapes, Position, Rotation, eyeLeft, eyeRight)
-            val buffer = json.toByteArray(Charsets.UTF_8)
-            val packet = DatagramPacket(
-                buffer,
-                buffer.size,
-                InetAddress.getByName(PC_IP),
-                PC_PORT.toInt()
-            )
-
+            val bytes = json.toByteArray(Charsets.UTF_8)
 
             if (pcSocket == null) {
                 activity?.runOnUiThread {
@@ -519,10 +660,14 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
                     }
                 }
                 Log.e(TAG, "PC Socket is not initialized. Cannot send blendshapes.")
+                return@launch
             }
 
-            pcSocket?.send(packet)
-            //Log.d(TAG, "Blendshapes sent to PC: $json")
+            // Reuse the pre-allocated packet — update data, address and port in-place.
+            sendPacket.setData(bytes, 0, bytes.size)
+            sendPacket.address = addr
+            sendPacket.port = pcPortInt
+            pcSocket?.send(sendPacket)
         }
 
     }
@@ -555,23 +700,38 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
         eyeLeft: Triple<Float, Float, Float>,
         eyeRight: Triple<Float, Float, Float>
     ): String {
-        val blendshapesJson = blendshapes.entries.joinToString(",") {
-            """{"k":"${it.key}","v":${it.value}}"""
-        }
+        val sb = jsonSb.get()!!.apply { setLength(0) }
+        val f = jsonFmt.get()!!  // one ThreadLocal lookup; reused for all 8 floats + blendshapes
 
-        return "{" +
-            "\"Timestamp\":${System.currentTimeMillis()}," +
-            "\"Hotkey\":-1," +
-            "\"FaceFound\":true," +
-            "\"Rotation\":{\"x\":${fmt8(rotation.first)},\"y\":${fmt8(rotation.second)},\"z\":${fmt8(rotation.third)}}," +
-            "\"Position\":{\"x\":${fmt8(position.first)},\"y\":${fmt8(position.second)},\"z\":${fmt8(position.third)}}," +
-            "\"EyeLeft\":{\"x\":${fmt8(eyeLeft.first)},\"y\":${fmt8(eyeLeft.second)},\"z\":${fmt8(eyeLeft.third)}}," +
-            "\"EyeRight\":{\"x\":${fmt8(eyeRight.first)},\"y\":${fmt8(eyeRight.second)},\"z\":${fmt8(eyeRight.third)}}," +
-            "\"BlendShapes\":[${blendshapesJson}]" +
-            "}"
+        sb.append("{\"Timestamp\":").append(System.currentTimeMillis())
+            .append(",\"Hotkey\":-1,\"FaceFound\":true,")
+            .append("\"Rotation\":{\"x\":").append(f.format(rotation.first.toDouble()))
+            .append(",\"y\":").append(f.format(rotation.second.toDouble()))
+            .append(",\"z\":").append(f.format(rotation.third.toDouble()))
+            .append("},\"Position\":{\"x\":").append(f.format(position.first.toDouble()))
+            .append(",\"y\":").append(f.format(position.second.toDouble()))
+            .append(",\"z\":").append(f.format(position.third.toDouble()))
+            .append("},\"EyeLeft\":{\"x\":").append(f.format(eyeLeft.first.toDouble()))
+            .append(",\"y\":").append(f.format(eyeLeft.second.toDouble()))
+            .append(",\"z\":").append(f.format(eyeLeft.third.toDouble()))
+            .append("},\"EyeRight\":{\"x\":").append(f.format(eyeRight.first.toDouble()))
+            .append(",\"y\":").append(f.format(eyeRight.second.toDouble()))
+            .append(",\"z\":").append(f.format(eyeRight.third.toDouble()))
+            .append("},\"BlendShapes\":[")
+
+        var first = true
+        for ((key, value) in blendshapes) {
+            if (!first) sb.append(',')
+            sb.append("{\"k\":\"").append(key)
+                .append("\",\"v\":").append(f.format(value.toDouble())).append('}')
+            first = false
+        }
+        sb.append("]}")
+        return sb.toString()
     }
 
-    private fun fmt8(value: Float): String = String.format(Locale.US, "%.8f", value)
+    // Kept for any future direct callers; internally uses the ThreadLocal DecimalFormat.
+    private fun fmt8(value: Float): String = jsonFmt.get()!!.format(value.toDouble())
 
 
     @SuppressLint("UnsafeOptInUsageError")
@@ -621,6 +781,10 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
     }
 
     private fun detectFace(imageProxy: ImageProxy) {
+        if (!isDetectionOn){
+            imageProxy.close()
+            return
+        }
         faceLandmarkerHelper.detectLiveStream(
             imageProxy = imageProxy,
             isFrontCamera = cameraFacing == CameraSelector.LENS_FACING_FRONT
@@ -631,7 +795,7 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
         activity?.runOnUiThread {
             Toast.makeText(requireContext(), error, Toast.LENGTH_SHORT).show()
             faceBlendshapesResultAdapter.updateResults(null)
-            faceBlendshapesResultAdapter.notifyDataSetChanged()
+            faceBlendshapesResultAdapter.notifyItemRangeChanged(0, faceBlendshapesResultAdapter.itemCount)
 
             if (errorCode == FaceLandmarkerHelper.GPU_ERROR) {
                 Log.d("VtuberPCFragment", "GPU_ERROR" + errorCode.toString())
@@ -656,7 +820,6 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
     override fun onResults(resultBundle: FaceLandmarkerHelper.ResultBundle) {
         if (_binding == null) return
 
-        val shouldUpdateUi = (++frameCount % UI_UPDATE_INTERVAL) == 0
         val blendshapes = resultBundle.result.faceBlendshapes()
         val faceLandmarks = resultBundle.result.faceLandmarks()
         val firstFace = faceLandmarks.firstOrNull()
@@ -674,7 +837,7 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
         val leftEyeBOTTOM = firstFace.getOrNull(145)
 
         val leftIrisLandmarkIndex = firstFace.getOrNull(468)
-        val leftIrisx = leftIrisLandmarkIndex?.x()?.toFloat() ?: 0f
+        val leftIrisx = leftIrisLandmarkIndex?.x() ?: 0f
 
         val rightEyeLandmarkIndex = firstFace.getOrNull(263)
         val rightEyeLEFT = firstFace.getOrNull(362)
@@ -683,7 +846,7 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
         val rightEyeBOTTOM = firstFace.getOrNull(374)
 
         val rightIrisLandmarkIndex = firstFace.getOrNull(473)
-        val rightIrisx = rightIrisLandmarkIndex?.x()?.toFloat() ?: 0f
+        val rightIrisx = rightIrisLandmarkIndex?.x() ?: 0f
 
         val (eyeLX, eyeLY) = if (
             leftIrisLandmarkIndex != null &&
@@ -727,9 +890,9 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
             -roll * HEAD_ROLL_WEIGHT,
         )
 
-        var facePosX = (0.5f - (noseLandmarkindex?.x()?.toFloat() ?: 0f)) * CAMERA_FOV_CM
-        var facePosY = (0.5f - (noseLandmarkindex?.y()?.toFloat() ?: 0f)) * CAMERA_FOV_CM
-        var facePosZ = (0.5f - (noseLandmarkindex?.z()?.toFloat() ?: 0f)) * CAMERA_FOV_CM
+        var facePosX = (0.5f - (noseLandmarkindex?.x() ?: 0f)) * CAMERA_FOV_CM
+        var facePosY = (0.5f - (noseLandmarkindex?.y() ?: 0f)) * CAMERA_FOV_CM
+        var facePosZ = (0.5f - (noseLandmarkindex?.z() ?: 0f)) * CAMERA_FOV_CM
 
         val f = fov
         val facePosition = if (
@@ -741,8 +904,8 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
             val distanceCm = estimateDistanceFromEyes(leftIrisx, rightIrisx)
             val wCm = CameraFov.widthAtDistance(distanceCm, f)
             val hCm = CameraFov.heightAtDistance(distanceCm, f)
-            val nx = noseLandmarkindex.x().toFloat()
-            val ny = noseLandmarkindex.y().toFloat()
+            val nx = noseLandmarkindex.x()
+            val ny = noseLandmarkindex.y()
 
             facePosX = ((0.5f - nx) * wCm).toFloat()
             facePosY = ((0.5f - ny) * hCm).toFloat()
@@ -756,36 +919,32 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
         val eyeRight = Triple(eyeRY * EYE_WEIGHT, eyeRX * EYE_WEIGHT, 0.0f)
 
         if (blendshapes != null && blendshapes.isPresent) {
-            val weightedBlendshapesMap = blendshapes.get()[0].associate {
-                it.categoryName() to it.score()
-            }.toMutableMap()
+            // Fill pre-allocated maps — no HashMap allocation per frame
+            reusedWeightedMap.clear()
+            blendshapes.get()[0].forEach { reusedWeightedMap[it.categoryName()] = it.score() }
 
-            val progressByBlendshape = if (shouldUpdateUi) mutableMapOf<String, Int>() else null
+            reusedProgressMap.clear()
             for (row in blendshapeRows) {
                 val name = row.blendshapeName
-                val score = weightedBlendshapesMap[name] ?: 0f
+                val score = reusedWeightedMap[name] ?: 0f
                 row.blendshapeValue = score
 
-                if (progressByBlendshape != null) {
-                    progressByBlendshape[name] = (score * 100).toInt().coerceIn(0, 100)
-                }
+                reusedProgressMap[name] = (score * 100).toInt().coerceIn(0, 100)
 
-                weightedBlendshapesMap[name] = score * row.cachedMultiplier
+                reusedWeightedMap[name] = score * row.cachedMultiplier
             }
 
-            sendBlendshapesToPC(weightedBlendshapesMap, faceRotation, facePosition, eyeLeft, eyeRight)
+            sendBlendshapesToPC(reusedWeightedMap, faceRotation, facePosition, eyeLeft, eyeRight)
 
-            if (shouldUpdateUi) {
+            if (isBlendshapesVisible) {
                 activity?.runOnUiThread {
                     if (_binding == null) return@runOnUiThread
 
                     faceBlendshapesResultAdapter.updateResults(resultBundle.result)
-                    faceBlendshapesResultAdapter.notifyDataSetChanged()
+                    faceBlendshapesResultAdapter.notifyItemRangeChanged(0, faceBlendshapesResultAdapter.itemCount)
 
-                    progressByBlendshape?.let { progressMap ->
-                        for (row in blendshapeRows) {
-                            row.blendshapeProgress.progress = progressMap[row.blendshapeName] ?: 0
-                        }
+                    for (row in blendshapeRows) {
+                        row.blendshapeProgress.progress = reusedProgressMap[row.blendshapeName] ?: 0
                     }
                 }
             }

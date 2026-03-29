@@ -15,17 +15,24 @@ class UDPListner(
 ) {
 
     private var running = true
+    private var socket: DatagramSocket? = null
 
     fun start(port: Int) {
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                val socket = DatagramSocket(port, InetAddress.getByName("0.0.0.0"))
-                socket.broadcast = true
+                val s = DatagramSocket(port, InetAddress.getByName("0.0.0.0"))
+                s.broadcast = true
+                socket = s
                 val buffer = ByteArray(2048)
 
                 while (running) {
                     val packet = DatagramPacket(buffer, buffer.size)
-                    socket.receive(packet)
+                    try {
+                        s.receive(packet)
+                    } catch (e: Exception) {
+                        if (!running) break  // closed by stop() — expected
+                        throw e
+                    }
 
                     val msg = String(packet.data, 0, packet.length)
 
@@ -48,15 +55,16 @@ class UDPListner(
 
                 }
 
-                socket.close()
+                s.close()
             } catch (e: Exception){
-                e.printStackTrace()
+                if (running) e.printStackTrace()  // ignore SocketException from stop()
             }
-        }.start()
+        }
 
     }
 
     fun stop() {
         running = false
+        socket?.close()  // unblocks the blocked socket.receive() call
     }
 }

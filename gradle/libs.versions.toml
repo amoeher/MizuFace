@@ -18,6 +18,7 @@ tasksCore = "0.10.3"
 tasksVision = "0.20230731"
 cameraLifecycle = "1.4.2"
 cardview = "1.0.0"
+flexbox = "3.0.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -44,6 +45,7 @@ tasks-core = { module = "ccom.google.mediapipe:tasks-core", version.ref = "tasks
 tasks-vision = { module = "com.google.mediapipe:tasks-vision", version.ref = "tasksVision" }
 androidx-camera-lifecycle = { group = "androidx.camera", name = "camera-lifecycle", version.ref = "cameraLifecycle" }
 androidx-cardview = { group = "androidx.cardview", name = "cardview", version.ref = "cardview" }
+flexbox = { group = "com.google.android.flexbox", name = "flexbox", version.ref = "flexbox" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

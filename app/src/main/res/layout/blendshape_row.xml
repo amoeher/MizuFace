@@ -31,10 +31,12 @@
 
 
         <LinearLayout
+            android:id="@+id/settings"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginHorizontal="15dp"
-            android:layout_marginTop="15dp">
+            android:layout_marginTop="15dp"
+            android:visibility="gone">
 
             <LinearLayout
                 android:layout_width="0dp"
@@ -63,7 +65,8 @@
                     android:paddingVertical="4dp"
                     android:text="@string/blendshape_zero"
                     android:textColor="@color/color_text_dark"
-                    android:textSize="18sp" />
+                    android:textSize="18sp"
+                    android:imeOptions="actionDone"/>
             </LinearLayout>
 
             <LinearLayout
@@ -93,7 +96,8 @@
                     android:paddingVertical="4dp"
                     android:text="@string/blendshape_one"
                     android:textColor="@color/color_text_dark"
-                    android:textSize="18sp" />
+                    android:textSize="18sp"
+                    android:imeOptions="actionDone"/>
             </LinearLayout>
 
             <LinearLayout
@@ -122,7 +126,8 @@
                     android:paddingVertical="4dp"
                     android:text="@string/blendshape_one"
                     android:textColor="@color/color_text_dark"
-                    android:textSize="18sp" />
+                    android:textSize="18sp"
+                    android:imeOptions="actionDone"/>
             </LinearLayout>
 
         </LinearLayout>

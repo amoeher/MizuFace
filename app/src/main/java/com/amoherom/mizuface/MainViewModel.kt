@@ -7,7 +7,7 @@ import androidx.lifecycle.ViewModel
  */
 class MainViewModel : ViewModel() {
 
-    private var _delegate: Int = FaceLandmarkerHelper.DELEGATE_CPU
+    private var _delegate: Int = FaceLandmarkerHelper.DELEGATE_GPU
     private var _minFaceDetectionConfidence: Float =
         FaceLandmarkerHelper.DEFAULT_FACE_DETECTION_CONFIDENCE
     private var _minFaceTrackingConfidence: Float = FaceLandmarkerHelper

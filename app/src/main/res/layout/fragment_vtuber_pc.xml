@@ -1,24 +1,24 @@
 <?xml version="1.0" encoding="utf-8"?>
 <androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/vtuber_container"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:layout_weight="1"
     android:background="@color/color_app_background_dark">
-
 
     <LinearLayout
         android:id="@+id/linearLayout"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:layout_marginTop="30dp"
-        android:layout_marginBottom="70dp"
+        android:layout_marginTop="40dp"
+        android:keepScreenOn="true"
         android:orientation="vertical"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent"
-        android:keepScreenOn="true">
+        app:layout_constraintTop_toTopOf="parent">
 
         <LinearLayout
             android:layout_width="match_parent"
@@ -26,14 +26,14 @@
             android:layout_marginStart="15dp"
             android:layout_marginEnd="15dp"
             android:layout_marginBottom="15dp"
-            android:orientation="horizontal"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintEnd_toEndOf="parent"
-            app:layout_constraintStart_toStartOf="parent"
             android:background="@drawable/rounded_bg"
             android:gravity="center"
+            android:orientation="horizontal"
             android:paddingStart="10dp"
-            android:paddingEnd="10dp">
+            android:paddingEnd="10dp"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent">
 
             <ImageView
                 android:id="@+id/pc_link_state"
@@ -53,6 +53,28 @@
                 android:textColor="@color/color_text_dark"
                 android:textSize="20sp" />
 
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="10dp"
+                    android:text="FPS: "
+                    android:textColor="@color/color_text_dark"
+                    android:textSize="18sp" />
+
+                <TextView
+                    android:id="@+id/fpsCounter"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="00"
+                    android:textColor="@color/color_text_dark"
+                    android:textSize="18sp" />
+            </LinearLayout>
+
             <ImageButton
                 android:id="@+id/refreshButton"
                 android:layout_width="50dp"
@@ -68,6 +90,14 @@
 
         </LinearLayout>
 
+        <LinearLayout
+            android:id="@+id/idle_container"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:orientation="vertical"
+            android:visibility="gone"/>
+
         <androidx.cardview.widget.CardView
             android:id="@+id/camera_preview"
             android:layout_width="match_parent"
@@ -77,22 +107,19 @@
             app:cardCornerRadius="15dp">
 
             <androidx.camera.view.PreviewView
-                    android:id="@+id/view_finder"
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    app:implementationMode="compatible">
-            </androidx.camera.view.PreviewView>
-
-
+                android:id="@+id/view_finder"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                app:implementationMode="compatible" />
 
 
             <ImageView
                 android:id="@+id/camCover"
-                android:visibility="invisible"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
-                app:srcCompat="@drawable/cam_cover"
-                android:contentDescription="@string/idle_rectangle"/>
+                android:contentDescription="@string/idle_rectangle"
+                android:visibility="invisible"
+                app:srcCompat="@drawable/cam_cover" />
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -129,11 +156,12 @@
         <FrameLayout
             android:id="@+id/blend_shape_preview"
             android:layout_width="match_parent"
-            android:layout_height="match_parent"
+            android:layout_height="0dp"
             android:layout_marginStart="15dp"
             android:layout_marginTop="15dp"
             android:layout_marginEnd="15dp"
-            android:layout_marginBottom="15dp">
+            android:layout_marginBottom="15dp"
+            android:layout_weight="1">
 
             <View
                 android:layout_width="match_parent"
@@ -146,39 +174,184 @@
                 android:layout_height="match_parent"
                 android:orientation="vertical">
 
-                <TextView
-                    android:id="@+id/textView2"
+                <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:fontFamily="sans-serif-black"
-                    android:text="@string/blendshapes"
-                    android:textAppearance="@style/TextAppearance.AppCompat.Large"
-                    android:textSize="16sp"
-                    android:textColor="@color/color_text_active"/>
+                    android:layout_marginBottom="10sp"
+                    android:baselineAligned="false"
+                    android:orientation="horizontal"
+                    android:gravity="center">
+
+                    <LinearLayout
+                        android:layout_width="0dp"
+                        android:layout_weight="1"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal">
+
+                        <com.amoherom.mizuface.fragment.SelectableText
+                            android:id="@+id/ControlsSelector"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/controls"
+                            android:textColor="@color/color_text_dark"
+                            android:textSize="18sp" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginHorizontal="12sp"
+                            android:text="@string/nav_separator"
+                            android:textColor="@color/color_text_dark"
+                            android:textSize="18sp" />
+
+                        <com.amoherom.mizuface.fragment.SelectableText
+                            android:id="@+id/BlendshapeSelector"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/blendshapes"
+                            android:textColor="@color/color_text_dark"
+                            android:textSize="18sp" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:layout_marginHorizontal="12sp"
+                            android:text="@string/nav_separator"
+                            android:textColor="@color/color_text_dark"
+                            android:textSize="18sp" />
+
+                        <com.amoherom.mizuface.fragment.SelectableText
+                            android:id="@+id/TrackingSelector"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="@string/tracking"
+                            android:textColor="@color/color_text_dark"
+                            android:textSize="18sp" />
+                    </LinearLayout>
+
+                    <ImageButton
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        android:background="@drawable/rounded_bg"
+                        android:contentDescription="@string/more_settings"
+                        app:srcCompat="@drawable/more" />
+                </LinearLayout>
 
                 <ScrollView
+                    android:id="@+id/controlPanelView"
                     android:layout_width="match_parent"
-                    android:layout_height="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_weight="1"
+                    android:contentDescription="@string/tracking_control_panel">
+
+                    <com.google.android.flexbox.FlexboxLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        app:flexWrap="wrap"
+                        app:alignContent="space_between"
+                        app:alignItems="center">
+
+                        <ImageButton
+                            android:id="@+id/powerButton"
+                            android:layout_width="110dp"
+                            android:layout_height="110dp"
+                            android:contentDescription="@string/tracking_on_off"
+                            app:srcCompat="@drawable/power"
+                            android:background="@drawable/rounded_bg"
+                            android:layout_margin="5dp"/>
+
+                        <Button
+                            android:id="@+id/eye_track"
+                            android:layout_width="110dp"
+                            android:layout_height="110dp"
+                            android:text="@string/track_eyes"
+                            android:background="@drawable/rounded_bg"
+                            android:layout_margin="5dp"/>
+
+                        <Button
+                            android:id="@+id/fcl_blink"
+                            android:layout_width="110dp"
+                            android:layout_height="110dp"
+                            android:text="@string/auto_blink"
+                            android:background="@drawable/rounded_bg"
+                            android:layout_margin="5dp" />
+
+                        <Button
+                            android:id="@+id/exp_happy"
+                            android:layout_width="110dp"
+                            android:layout_height="110dp"
+                            android:text="@string/happy"
+                            android:background="@drawable/rounded_bg"
+                            android:layout_margin="5dp"
+                            app:backgroundTint="@null"/>
+
+                        <Button
+                            android:id="@+id/exp_sad"
+                            android:layout_width="110dp"
+                            android:layout_height="110dp"
+                            android:text="@string/sad"
+                            android:background="@drawable/rounded_bg"
+                            android:layout_margin="5dp"
+                            app:backgroundTint="@null"/>
+
+                        <Button
+                            android:id="@+id/exp_angry"
+                            android:layout_width="110dp"
+                            android:layout_height="110dp"
+                            android:text="@string/angry"
+                            android:background="@drawable/rounded_bg"
+                            android:layout_margin="5dp"
+                            app:backgroundTint="@null"/>
+
+                        <Button
+                            android:id="@+id/exp_surprise"
+                            android:layout_width="110dp"
+                            android:layout_height="110dp"
+                            android:text="@string/surprise"
+                            android:background="@drawable/rounded_bg"
+                            android:layout_margin="5dp"
+                            app:backgroundTint="@null"/>
+
+
+                    </com.google.android.flexbox.FlexboxLayout>
+
+                </ScrollView>
+
+
+
+                <ScrollView
+                    android:id="@+id/blendshapeScrollView"
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_weight="1"
+                    android:visibility="gone"
                     android:contentDescription="@string/blendshape_list_preview">
 
                     <LinearLayout
                         android:id="@+id/blendshapeList"
                         android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:orientation="vertical"
+                        android:layout_height="0dp"
                         android:divider="@android:color/transparent"
                         android:dividerHeight="10dp"
-                        android:showDividers="middle"
-                        >
-                    </LinearLayout>
+                        android:orientation="vertical"
+                        android:paddingBottom="60dp"
+                        android:showDividers="middle" />
+                </ScrollView>
+
+                <ScrollView
+                    android:id="@+id/trackingSettingsView"
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_weight="1"
+                    android:visibility="gone"
+                    android:contentDescription="@string/tracking_settings_panel">
+
                 </ScrollView>
             </LinearLayout>
-
-
         </FrameLayout>
 
-    </LinearLayout>
 
+    </LinearLayout>
 
 
 </androidx.constraintlayout.widget.ConstraintLayout>
