@@ -35,10 +35,13 @@ class FaceLandmarkerHelper (
         // If the Face Landmarker will not change, a lazy val would be preferable.
         private var faceLandmarker: FaceLandmarker? = null
 
-        // Reused bitmap buffer to avoid per-frame allocations
+        // Reuse bitmap buffer to avoid per-frame allocations
         private var bitmapBuffer: Bitmap? = null
     
         private var rotatedBitmap: Bitmap? = null
+
+        // Reuse the Canvas tied to rotatedBitmap — only reallocated on camera switch
+        private var rotatedCanvas: Canvas? = null
 
         init {
             setupFaceLandmarker()
@@ -184,13 +187,17 @@ class FaceLandmarkerHelper (
             matrix.postTranslate(-dstRect.left, -dstRect.top)
 
             // Reuse the rotated bitmap; only reallocate when dimensions change (e.g. camera switch)
-            val rotated = rotatedBitmap?.takeIf {
-                it.width == outWidth && it.height == outHeight
-            } ?: Bitmap.createBitmap(outWidth, outHeight, Bitmap.Config.ARGB_8888)
-                .also { rotatedBitmap = it }
+            val rotated = if (rotatedBitmap?.width == outWidth && rotatedBitmap?.height == outHeight) {
+                rotatedBitmap!!
+            } else {
+                Bitmap.createBitmap(outWidth, outHeight, Bitmap.Config.ARGB_8888).also {
+                    rotatedBitmap = it
+                    rotatedCanvas = Canvas(it)  // new Canvas only when bitmap is reallocated
+                }
+            }
 
-            // Draw bitmapBuffer into the reused rotated bitmap each frame (no new allocation)
-            Canvas(rotated).drawBitmap(bitmapBuffer, matrix, null)
+            // Reuse the canvas — no new Canvas object created each frame
+            rotatedCanvas!!.drawBitmap(bitmapBuffer, matrix, null)
 
             // Convert the input Bitmap object to an MPImage object to run inference
             val mpImage = BitmapImageBuilder(rotated).build()

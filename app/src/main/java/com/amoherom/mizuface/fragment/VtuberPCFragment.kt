@@ -35,6 +35,8 @@ import kotlinx.coroutines.launch
 import java.net.DatagramPacket
 import java.net.DatagramSocket
 import java.net.InetAddress
+import java.text.DecimalFormat
+import java.text.DecimalFormatSymbols
 import java.util.Locale
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
@@ -81,6 +83,8 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
     companion object {
         private const val TAG = "MIZU"
         private const val UI_UPDATE_INTERVAL = 1 // update progress bars every 3rd frame
+        // Compiled once — not re-created on every dialog click
+        private val IP_PORT_REGEX = Regex("""^(\d{1,3}(\.\d{1,3}){3})(\s*:\s*\d{1,5})?$""")
     }
 
     private var _binding: FragmentVtuberPcBinding? = null
@@ -110,6 +114,25 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
     // Persistent IO scope - avoids creating a new CoroutineScope every frame
     private var ioScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
+    // Pre-allocated maps for onResults() — inference callback is single-threaded,
+    // so these are safe to reuse without locking.
+    private val reusedWeightedMap = HashMap<String, Float>(64)
+    private val reusedProgressMap = HashMap<String, Int>(64)
+
+    // Cached port as Int — updated once in InitiatePCConnection, read every frame.
+    private var pcPortInt: Int = 50509
+
+    // Pre-allocated DatagramPacket — avoids one object allocation per frame.
+    // Only touched inside the ioScope launch which is effectively serialised by
+    // STRATEGY_KEEP_ONLY_LATEST (at most one outstanding send at a time).
+    private val sendPacket = DatagramPacket(ByteArray(1), 1)
+
+    // ThreadLocal JSON utilities — thread-safe for coroutines on Dispatchers.IO.
+    private val jsonSb = ThreadLocal.withInitial { StringBuilder(2048) }
+    private val jsonFmt = ThreadLocal.withInitial {
+        DecimalFormat("0.00000000", DecimalFormatSymbols(Locale.US))
+    }
+
     private var isDetectionOn = true
 
     // FPS tracking
@@ -123,15 +146,13 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
     private var isBlendshapesVisible = false
 
     private var isTrackingSettingsVisible = false
-
+    
     override fun onResume() {
         super.onResume()
         // Make sure that all permissions are still present, since the
         // user could have removed them while the app was in paused state.
         if (!PermissionsFragment.hasPermissions(requireContext())) {
-            Navigation.findNavController(
-                requireActivity(), R.id.fragment_container
-            ).navigate(R.id.action_vtuberPCFragment_to_permissions_fragment)
+            requireActivity().findNavController(R.id.fragment_container).navigate(R.id.action_vtuberPCFragment_to_permissions_fragment)
         }
 
         if (isDetectionOn) {
@@ -173,7 +194,7 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
                 val enumIpAddr = intf.inetAddresses
                 while (enumIpAddr.hasMoreElements()) {
                     val inetAddress = enumIpAddr.nextElement()
-                    if (!inetAddress.isLoopbackAddress && inetAddress.hostAddress.indexOf(':') < 0) {
+                    if (!inetAddress.isLoopbackAddress && inetAddress?.hostAddress?.indexOf(':')!! < 0) {
                         return ipToString(inetAddress.hashCode())
                     }
                 }
@@ -185,12 +206,6 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
         return null
     }
 
-    private fun getFrameRate(): String {
-        val timeElapsed1: Long = android.os.SystemClock.elapsedRealtime()
-        val timeElapsed2: Long = android.os.SystemClock.elapsedRealtime()
-        val frameTime = 1000.0 / (timeElapsed2 - timeElapsed1)
-        return frameTime.toString()
-    }
 
     private fun ipToString(ip: Int): String {
         return String.format(
@@ -447,8 +462,7 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
                 .setView(editText)
                 .setPositiveButton(getString(R.string.dialog_ok)) { _, _ ->
                     val text = editText.text.toString()
-                    val ipPortRegex = Regex("""^(\d{1,3}(\.\d{1,3}){3})(\s*:\s*\d{1,5})?$""")
-                    if (!ipPortRegex.matches(text.trim())) {
+                    if (!IP_PORT_REGEX.matches(text.trim())) {
                         Toast.makeText(requireContext(), getString(R.string.invalid_ip_address_format), Toast.LENGTH_SHORT).show()
                         return@setPositiveButton
                     }
@@ -566,6 +580,7 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
 
         try {
             pcSocket = DatagramSocket()
+            pcPortInt = PC_PORT.toIntOrNull() ?: 50509  // cache once; read every frame
             activity?.runOnUiThread {
                 binding.pcLinkState.setImageResource(R.drawable.connecting)
                 binding.statusText.setText(R.string.state_connecting)
@@ -635,14 +650,7 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
 
         ioScope.launch {
             val json = buildJson(blendshapes, Position, Rotation, eyeLeft, eyeRight)
-            val buffer = json.toByteArray(Charsets.UTF_8)
-            val packet = DatagramPacket(
-                buffer,
-                buffer.size,
-                addr,
-                PC_PORT.toInt()
-            )
-
+            val bytes = json.toByteArray(Charsets.UTF_8)
 
             if (pcSocket == null) {
                 activity?.runOnUiThread {
@@ -652,10 +660,14 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
                     }
                 }
                 Log.e(TAG, "PC Socket is not initialized. Cannot send blendshapes.")
+                return@launch
             }
 
-            pcSocket?.send(packet)
-            //Log.d(TAG, "Blendshapes sent to PC: $json")
+            // Reuse the pre-allocated packet — update data, address and port in-place.
+            sendPacket.setData(bytes, 0, bytes.size)
+            sendPacket.address = addr
+            sendPacket.port = pcPortInt
+            pcSocket?.send(sendPacket)
         }
 
     }
@@ -688,23 +700,38 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
         eyeLeft: Triple<Float, Float, Float>,
         eyeRight: Triple<Float, Float, Float>
     ): String {
-        val blendshapesJson = blendshapes.entries.joinToString(",") {
-            """{"k":"${it.key}","v":${it.value}}"""
-        }
+        val sb = jsonSb.get()!!.apply { setLength(0) }
+        val f = jsonFmt.get()!!  // one ThreadLocal lookup; reused for all 8 floats + blendshapes
 
-        return "{" +
-            "\"Timestamp\":${System.currentTimeMillis()}," +
-            "\"Hotkey\":-1," +
-            "\"FaceFound\":true," +
-            "\"Rotation\":{\"x\":${fmt8(rotation.first)},\"y\":${fmt8(rotation.second)},\"z\":${fmt8(rotation.third)}}," +
-            "\"Position\":{\"x\":${fmt8(position.first)},\"y\":${fmt8(position.second)},\"z\":${fmt8(position.third)}}," +
-            "\"EyeLeft\":{\"x\":${fmt8(eyeLeft.first)},\"y\":${fmt8(eyeLeft.second)},\"z\":${fmt8(eyeLeft.third)}}," +
-            "\"EyeRight\":{\"x\":${fmt8(eyeRight.first)},\"y\":${fmt8(eyeRight.second)},\"z\":${fmt8(eyeRight.third)}}," +
-            "\"BlendShapes\":[${blendshapesJson}]" +
-            "}"
+        sb.append("{\"Timestamp\":").append(System.currentTimeMillis())
+            .append(",\"Hotkey\":-1,\"FaceFound\":true,")
+            .append("\"Rotation\":{\"x\":").append(f.format(rotation.first.toDouble()))
+            .append(",\"y\":").append(f.format(rotation.second.toDouble()))
+            .append(",\"z\":").append(f.format(rotation.third.toDouble()))
+            .append("},\"Position\":{\"x\":").append(f.format(position.first.toDouble()))
+            .append(",\"y\":").append(f.format(position.second.toDouble()))
+            .append(",\"z\":").append(f.format(position.third.toDouble()))
+            .append("},\"EyeLeft\":{\"x\":").append(f.format(eyeLeft.first.toDouble()))
+            .append(",\"y\":").append(f.format(eyeLeft.second.toDouble()))
+            .append(",\"z\":").append(f.format(eyeLeft.third.toDouble()))
+            .append("},\"EyeRight\":{\"x\":").append(f.format(eyeRight.first.toDouble()))
+            .append(",\"y\":").append(f.format(eyeRight.second.toDouble()))
+            .append(",\"z\":").append(f.format(eyeRight.third.toDouble()))
+            .append("},\"BlendShapes\":[")
+
+        var first = true
+        for ((key, value) in blendshapes) {
+            if (!first) sb.append(',')
+            sb.append("{\"k\":\"").append(key)
+                .append("\",\"v\":").append(f.format(value.toDouble())).append('}')
+            first = false
+        }
+        sb.append("]}")
+        return sb.toString()
     }
 
-    private fun fmt8(value: Float): String = String.format(Locale.US, "%.8f", value)
+    // Kept for any future direct callers; internally uses the ThreadLocal DecimalFormat.
+    private fun fmt8(value: Float): String = jsonFmt.get()!!.format(value.toDouble())
 
 
     @SuppressLint("UnsafeOptInUsageError")
@@ -768,7 +795,7 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
         activity?.runOnUiThread {
             Toast.makeText(requireContext(), error, Toast.LENGTH_SHORT).show()
             faceBlendshapesResultAdapter.updateResults(null)
-            faceBlendshapesResultAdapter.notifyDataSetChanged()
+            faceBlendshapesResultAdapter.notifyItemRangeChanged(0, faceBlendshapesResultAdapter.itemCount)
 
             if (errorCode == FaceLandmarkerHelper.GPU_ERROR) {
                 Log.d("VtuberPCFragment", "GPU_ERROR" + errorCode.toString())
@@ -892,34 +919,32 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
         val eyeRight = Triple(eyeRY * EYE_WEIGHT, eyeRX * EYE_WEIGHT, 0.0f)
 
         if (blendshapes != null && blendshapes.isPresent) {
-            val weightedBlendshapesMap = blendshapes.get()[0].associate {
-                it.categoryName() to it.score()
-            }.toMutableMap()
+            // Fill pre-allocated maps — no HashMap allocation per frame
+            reusedWeightedMap.clear()
+            blendshapes.get()[0].forEach { reusedWeightedMap[it.categoryName()] = it.score() }
 
-            val progressByBlendshape = mutableMapOf<String, Int>()
+            reusedProgressMap.clear()
             for (row in blendshapeRows) {
                 val name = row.blendshapeName
-                val score = weightedBlendshapesMap[name] ?: 0f
+                val score = reusedWeightedMap[name] ?: 0f
                 row.blendshapeValue = score
 
-                progressByBlendshape[name] = (score * 100).toInt().coerceIn(0, 100)
+                reusedProgressMap[name] = (score * 100).toInt().coerceIn(0, 100)
 
-                weightedBlendshapesMap[name] = score * row.cachedMultiplier
+                reusedWeightedMap[name] = score * row.cachedMultiplier
             }
 
-            sendBlendshapesToPC(weightedBlendshapesMap, faceRotation, facePosition, eyeLeft, eyeRight)
+            sendBlendshapesToPC(reusedWeightedMap, faceRotation, facePosition, eyeLeft, eyeRight)
 
             if (isBlendshapesVisible) {
                 activity?.runOnUiThread {
                     if (_binding == null) return@runOnUiThread
 
                     faceBlendshapesResultAdapter.updateResults(resultBundle.result)
-                    faceBlendshapesResultAdapter.notifyDataSetChanged()
+                    faceBlendshapesResultAdapter.notifyItemRangeChanged(0, faceBlendshapesResultAdapter.itemCount)
 
-                    progressByBlendshape.let { progressMap ->
-                        for (row in blendshapeRows) {
-                            row.blendshapeProgress.progress = progressMap[row.blendshapeName] ?: 0
-                        }
+                    for (row in blendshapeRows) {
+                        row.blendshapeProgress.progress = reusedProgressMap[row.blendshapeName] ?: 0
                     }
                 }
             }
