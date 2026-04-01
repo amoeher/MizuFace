@@ -134,6 +134,7 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
     }
 
     private var isDetectionOn = true
+    private var isEyeTrackingEnabled = true
 
     // FPS tracking
     private var fpsFrameCount = 0
@@ -344,6 +345,25 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
         binding.BlendshapeSelector.setOnClickListener { showBlendshapes() }
         binding.TrackingSelector.setOnClickListener { showTrackingSettings() }
         binding.ControlsSelector.setOnClickListener { showControls() }
+
+        isEyeTrackingEnabled = true;
+        binding.eyeTrack.backgroundTintList = requireContext().getColorStateList(R.color.mp_color_primary_dark)
+        binding.eyeTrack.setOnClickListener {
+            it.animate()
+                .scaleX(0.9f)
+                .scaleY(0.9f)
+                .setDuration(80)
+                .withEndAction {
+                    it.animate()
+                        .scaleX(1f)
+                        .scaleY(1f).duration = 80
+                }
+            isEyeTrackingEnabled = !isEyeTrackingEnabled
+
+            binding.eyeTrack.backgroundTintList =
+                if (!isEyeTrackingEnabled) null
+                else requireContext().getColorStateList(R.color.mp_color_primary_dark)
+        }
 
         binding.powerButton.setOnClickListener { toggleDetectionState() }
 
@@ -915,8 +935,8 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
             Triple(facePosX, facePosY, CAMERA_FOV_CM)
         }
 
-        val eyeLeft = Triple(eyeLY * EYE_WEIGHT, -eyeLX * EYE_WEIGHT, 0.0f)
-        val eyeRight = Triple(eyeRY * EYE_WEIGHT, eyeRX * EYE_WEIGHT, 0.0f)
+        val eyeLeft = if(isEyeTrackingEnabled) Triple(eyeLY * EYE_WEIGHT, -eyeLX * EYE_WEIGHT, 0.0f) else Triple(0.0f, 0.0f, 0.0f)
+        val eyeRight = if(isEyeTrackingEnabled) Triple(eyeRY * EYE_WEIGHT, eyeRX * EYE_WEIGHT, 0.0f) else Triple(0.0f, 0.0f, 0.0f)
 
         if (blendshapes != null && blendshapes.isPresent) {
             // Fill pre-allocated maps — no HashMap allocation per frame
