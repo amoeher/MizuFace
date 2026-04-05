@@ -59,6 +59,7 @@ import kotlin.math.tan
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
+import com.amoherom.mizuface.Expression
 
 
 class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
@@ -147,6 +148,8 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
     private var isBlendshapesVisible = false
 
     private var isTrackingSettingsVisible = false
+
+    private var currentExpression = Expression.None
     
     override fun onResume() {
         super.onResume()
