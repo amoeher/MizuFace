@@ -47,13 +47,14 @@ class FaceBlendshapesResultAdapter :
 
     override fun getItemCount(): Int = categories.size
 
-    inner class ViewHolder(private val binding: FaceBlendshapesResultBinding) :
+    class ViewHolder(private val binding: FaceBlendshapesResultBinding) :
         RecyclerView.ViewHolder(binding.root) {
 
         fun bind(label: String?, score: Float?) {
             with(binding) {
                 tvLabel.text = label ?: NO_VALUE
                 tvScore.text = if (score != null) String.format(
+                    java.util.Locale.US,
                     "%.2f",
                     score
                 ) else NO_VALUE

@@ -1,7 +1,4 @@
 package com.amoherom.mizuface
-
-import com.amoherom.mizuface.Blendshape
-
 class BlenshapeMapper {
 
     companion object {

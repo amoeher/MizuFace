@@ -21,7 +21,6 @@ import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
-import androidx.navigation.Navigation
 import com.amoherom.mizuface.FaceLandmarkerHelper
 import com.amoherom.mizuface.MainViewModel
 import com.amoherom.mizuface.R
@@ -60,6 +59,8 @@ import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.updatePadding
 import com.amoherom.mizuface.Expression
+import androidx.core.content.edit
+import kotlin.math.atan2
 
 
 class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
@@ -83,7 +84,7 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
 
     companion object {
         private const val TAG = "MIZU"
-        private const val UI_UPDATE_INTERVAL = 1 // update progress bars every 3rd frame
+        // private const val UI_UPDATE_INTERVAL = 1 // update progress bars every 3rd frame
         // Compiled once — not re-created on every dialog click
         private val IP_PORT_REGEX = Regex("""^(\d{1,3}(\.\d{1,3}){3})(\s*:\s*\d{1,5})?$""")
     }
@@ -199,7 +200,7 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
                 while (enumIpAddr.hasMoreElements()) {
                     val inetAddress = enumIpAddr.nextElement()
                     if (!inetAddress.isLoopbackAddress && inetAddress?.hostAddress?.indexOf(':')!! < 0) {
-                        return ipToString(inetAddress.hashCode())
+                        return inetAddress.hostAddress
                     }
                 }
             }
@@ -209,18 +210,6 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
         }
         return null
     }
-
-
-    private fun ipToString(ip: Int): String {
-        return String.format(
-            "%d.%d.%d.%d",
-            (ip shr 24 and 0xFF),
-            (ip shr 16 and 0xFF),
-            (ip shr 8 and 0xFF),
-            (ip and 0xFF),
-        )
-    }
-
     private fun setUpCamera(){
         val cameraProviderFuture = ProcessCameraProvider.getInstance(requireContext())
         cameraProviderFuture.addListener(
@@ -422,7 +411,7 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
                 container.addView(itemView)
 
                 itemView.setOnClickListener {
-                    settings.visibility = if (settings.visibility == View.VISIBLE) {
+                    settings.visibility = if (settings.isVisible) {
                         View.GONE
                     } else {
                         View.VISIBLE
@@ -443,7 +432,7 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
                         } else {
                             savePref(row.blendshapeName, text)
                             row.cachedMultiplier = value
-                            InitiatePCConnection()
+                            initiatePCConnection()
                         }
                         val imm = requireContext().getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
                         imm.hideSoftInputFromWindow(row.blendshapeWeight.windowToken, 0)
@@ -452,21 +441,31 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
                     } else false
                 }
 
-                row.blendshapeWeight.setOnFocusChangeListener { v, hasFocus ->
+                row.blendshapeWeight.setOnFocusChangeListener { _, hasFocus ->
                     if (!hasFocus) {
                         val text = row.blendshapeWeight.text.toString()
                         val value = text.toFloatOrNull() ?: return@setOnFocusChangeListener
                         savePref(row.blendshapeName, text)
                         row.cachedMultiplier = value
-                        InitiatePCConnection()
+                        initiatePCConnection()
                     }
                 }
             }
 
         }
 
+        val statusContainer = binding.statusContainer
 
-        val ipEditText = binding.statusText
+        statusContainer.setOnClickListener {
+            val phoneIP = getLocalIPAddress() ?: getString(R.string.unknown_ip)
+            IpPopupFragment.newInstance(
+                phoneIp = phoneIP,
+                pcIp = "$PC_IP:$PC_PORT"
+            ).show(childFragmentManager, IpPopupFragment.TAG)
+        }
+
+        val ipEditText = EditText(requireContext())
+
         ipEditText.setOnClickListener {
             ipEditText.isFocusableInTouchMode = true
             ipEditText.isFocusable = true
@@ -498,7 +497,7 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
                         savePref("pc_ip", ip)
                         savePref("pc_port", port.toString())
                     }
-                    InitiatePCConnection()
+                    initiatePCConnection()
                 }
                 .setNegativeButton(getString(R.string.dialog_cancel), null)
                 .create()
@@ -516,7 +515,7 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
         }
 
         binding.hidePreview.setOnClickListener {
-            var camCover = binding.camCover
+            val camCover = binding.camCover
             if (camCover.isVisible)
             {
                 camCover.visibility = View.INVISIBLE
@@ -534,7 +533,7 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
         }
 
         activity?.runOnUiThread {
-            var coverID = getPref("cam_cover_id")
+            val coverID = getPref("cam_cover_id")
             if (coverID.isEmpty() || coverID == "1")
             {
                 binding.camCover.setImageResource(R.drawable.idlerec)
@@ -546,7 +545,7 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
         }
 
         binding.camCover.setOnClickListener {
-            var coverID = getPref("cam_cover_id")
+            val coverID = getPref("cam_cover_id")
             if (coverID.isEmpty() || coverID == "1")
             {
                 savePref("cam_cover_id", "2")
@@ -572,13 +571,13 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
             binding.pcLinkState.setImageResource(R.drawable.search)
             binding.statusText.setText(R.string.state_scanning)
         }
-        listner = UDPListner() { ip, port ->
+        listner = UDPListner { ip, port ->
             Log.d(TAG, "GOT BR $ip: $port")
             try {
                 PC_IP = ip.substring(1)
                 PC_PORT = port
 
-                InitiatePCConnection()
+                initiatePCConnection()
                 isLookingForPc = false
                 listner?.stop()
             }
@@ -593,7 +592,7 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
         listner?.start(21412)
     }
 
-    private fun InitiatePCConnection() {
+    private fun initiatePCConnection() {
         // Close any existing connection before creating a new one
         ClosePCConnection()
 
@@ -608,8 +607,6 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
                 binding.pcLinkState.setImageResource(R.drawable.connecting)
                 binding.statusText.setText(R.string.state_connecting)
             }
-            val localIp = getLocalIPAddress() ?: getString(R.string.unknown_ip)
-            val ipState = getString(R.string.phone_ip_state, localIp, PC_PORT)
             cachedInetAddress = InetAddress.getByName(PC_IP)
 
             activity?.runOnUiThread {
@@ -671,8 +668,13 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
             }
         }
 
+        // Snapshot the map before crossing thread boundaries — the caller's reusedWeightedMap
+        // is mutated (clear + refill) on every camera frame, so the IO coroutine must own its
+        // own immutable copy to avoid ConcurrentModificationException during iteration.
+        val snapshot = HashMap(blendshapes)
+
         ioScope.launch {
-            val json = buildJson(blendshapes, Position, Rotation, eyeLeft, eyeRight)
+            val json = buildJson(snapshot, Position, Rotation, eyeLeft, eyeRight)
             val bytes = json.toByteArray(Charsets.UTF_8)
 
             if (pcSocket == null) {
@@ -821,7 +823,7 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
             faceBlendshapesResultAdapter.notifyItemRangeChanged(0, faceBlendshapesResultAdapter.itemCount)
 
             if (errorCode == FaceLandmarkerHelper.GPU_ERROR) {
-                Log.d("VtuberPCFragment", "GPU_ERROR" + errorCode.toString())
+                Log.d("VtuberPCFragment", "GPU_ERROR$errorCode")
                 Log.d("VtuberPCFragment", error)
             }
         }
@@ -897,12 +899,12 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
 
         val dxYaw = (rightEyeLandmarkIndex?.x() ?: 0f) - (leftEyeLandmarkIndex?.x() ?: 0f)
         val dyYaw = (rightEyeLandmarkIndex?.z() ?: 0f) - (leftEyeLandmarkIndex?.z() ?: 0f)
-        val yaw = Math.atan2(dxYaw.toDouble(), dyYaw.toDouble()).toFloat()
+        val yaw = atan2(dxYaw.toDouble(), dyYaw.toDouble()).toFloat()
 
         val eyeY = ((leftEyeLandmarkIndex?.y() ?: 0f) + (rightEyeLandmarkIndex?.y() ?: 0f)) / 2
-        val pitch = Math.atan2((noseLandmarkindex?.y() ?: 0f) - eyeY.toDouble(), 1.0).toFloat()
+        val pitch = atan2((noseLandmarkindex?.y() ?: 0f) - eyeY.toDouble(), 1.0).toFloat()
 
-        val roll = Math.atan2(
+        val roll = atan2(
             ((rightEyeLandmarkIndex?.y() ?: 0f) - (leftEyeLandmarkIndex?.y() ?: 0f)).toDouble(),
             ((rightEyeLandmarkIndex?.x() ?: 0f) - (leftEyeLandmarkIndex?.x() ?: 0f)).toDouble()
         ).toFloat()
@@ -981,16 +983,14 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
 
     fun savePref(key: String, value: String){
         val sharedPref = activity?.getPreferences(Context.MODE_PRIVATE) ?: return
-        with (sharedPref.edit()) {
+        sharedPref.edit {
             putString(key, value)
-            apply()
         }
     }
     fun savePref(key: String, value: Int){
         val sharedPref = activity?.getPreferences(Context.MODE_PRIVATE) ?: return
-        with (sharedPref.edit()) {
+        sharedPref.edit {
             putInt(key, value)
-            apply()
         }
     }
 

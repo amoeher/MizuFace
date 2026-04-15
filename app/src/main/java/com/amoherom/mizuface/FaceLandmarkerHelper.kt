@@ -18,6 +18,7 @@ import com.google.mediapipe.tasks.core.Delegate
 import com.google.mediapipe.tasks.vision.core.RunningMode
 import com.google.mediapipe.tasks.vision.facelandmarker.FaceLandmarker
 import com.google.mediapipe.tasks.vision.facelandmarker.FaceLandmarkerResult
+import androidx.core.graphics.createBitmap
 
 class FaceLandmarkerHelper (
     var minFaceDetectionConfidence: Float = DEFAULT_FACE_DETECTION_CONFIDENCE,
@@ -154,11 +155,7 @@ class FaceLandmarkerHelper (
             // Reuse or allocate bitmap buffer
             val bitmapBuffer = bitmapBuffer?.takeIf {
                 it.width == imageProxy.width && it.height == imageProxy.height
-            } ?: Bitmap.createBitmap(
-                imageProxy.width,
-                imageProxy.height,
-                Bitmap.Config.ARGB_8888
-            ).also { bitmapBuffer = it }
+            } ?: createBitmap(imageProxy.width, imageProxy.height).also { bitmapBuffer = it }
             imageProxy.use { bitmapBuffer.copyPixelsFromBuffer(imageProxy.planes[0].buffer) }
             imageProxy.close()
 
@@ -190,7 +187,7 @@ class FaceLandmarkerHelper (
             val rotated = if (rotatedBitmap?.width == outWidth && rotatedBitmap?.height == outHeight) {
                 rotatedBitmap!!
             } else {
-                Bitmap.createBitmap(outWidth, outHeight, Bitmap.Config.ARGB_8888).also {
+                createBitmap(outWidth, outHeight).also {
                     rotatedBitmap = it
                     rotatedCanvas = Canvas(it)  // new Canvas only when bitmap is reallocated
                 }
@@ -347,7 +344,7 @@ class FaceLandmarkerHelper (
             result: FaceLandmarkerResult,
             input: MPImage
         ) {
-            if( result.faceLandmarks().size > 0 ) {
+            if(result.faceLandmarks().isNotEmpty()) {
                 val finishTimeMs = SystemClock.uptimeMillis()
                 val inferenceTime = finishTimeMs - result.timestampMs()
 

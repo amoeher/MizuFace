@@ -1,5 +1,8 @@
 package com.amoherom.mizuface.fragment
 
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.repeatOnLifecycle
+import kotlinx.coroutines.launch
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
@@ -14,8 +17,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
-import androidx.navigation.Navigation
 import com.amoherom.mizuface.R
+import androidx.navigation.findNavController
 
 private val PERMISSIONS_REQUIRED = arrayOf(Manifest.permission.CAMERA)
 
@@ -96,14 +99,14 @@ class PermissionsFragment : Fragment() {
     }
 
     private fun navigateToCamera() {
-        lifecycleScope.launchWhenStarted {
-            Navigation.findNavController(
-                requireActivity(),
-                R.id.fragment_container
-            ).navigate(
-                R.id.action_permissions_fragment_to_vtuberPCFragment
-            )
+        lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                requireActivity().findNavController(R.id.fragment_container).navigate(
+                    R.id.action_permissions_fragment_to_vtuberPCFragment
+                )
+            }
         }
+
     }
 
     companion object {

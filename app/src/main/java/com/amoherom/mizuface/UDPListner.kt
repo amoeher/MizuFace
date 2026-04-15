@@ -1,7 +1,5 @@
 package com.amoherom.mizuface
 
-import android.content.Context
-import android.util.Log
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -46,7 +44,7 @@ class UDPListner(
                                     onServerFound(packet.address.toString(), port.toString())
                                 }
                             }
-                        } catch (e: Exception){
+                        } catch (_: Exception){
 
                         }
 
