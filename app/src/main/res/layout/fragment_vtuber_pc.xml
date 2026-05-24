@@ -123,6 +123,21 @@
                 android:visibility="invisible"
                 app:srcCompat="@drawable/cam_cover" />
 
+            <!-- Zoom level badge -->
+            <TextView
+                android:id="@+id/zoomLevel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="bottom|end"
+                android:layout_margin="8dp"
+                android:background="@drawable/rounded_bg"
+                android:paddingHorizontal="8dp"
+                android:paddingVertical="4dp"
+                android:text="1.0×"
+                android:textColor="@color/color_text_dark"
+                android:textSize="13sp"
+                android:visibility="gone" />
+
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"

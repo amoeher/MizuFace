@@ -4,6 +4,9 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.os.Bundle
 import android.util.Log
+import android.view.GestureDetector
+import android.view.MotionEvent
+import android.view.ScaleGestureDetector
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
@@ -14,9 +17,11 @@ import android.widget.Toast
 import androidx.camera.core.AspectRatio
 import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
+import androidx.camera.core.FocusMeteringAction
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
 import androidx.camera.core.Preview
+import androidx.camera.core.SurfaceOrientedMeteringPointFactory
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.core.content.ContextCompat
 import androidx.fragment.app.Fragment
@@ -151,7 +156,12 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
     private var isTrackingSettingsVisible = false
 
     private var currentExpression = Expression.None
-    
+
+    // Gesture detectors for camera zoom/pan
+    private var scaleGestureDetector: ScaleGestureDetector? = null
+    private var gestureDetector: GestureDetector? = null
+    private var currentZoomRatio = 1f
+
     override fun onResume() {
         super.onResume()
         // Make sure that all permissions are still present, since the
@@ -224,6 +234,69 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
                 bindCameraUseCases()
             }, ContextCompat.getMainExecutor(requireContext())
         )
+    }
+
+    @SuppressLint("ClickableViewAccessibility")
+    private fun setupCameraGestures() {
+        val previewView = binding.viewFinder
+
+        // Pinch-to-zoom
+        scaleGestureDetector = ScaleGestureDetector(requireContext(),
+            object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
+                override fun onScale(detector: ScaleGestureDetector): Boolean {
+                    val cam = camera ?: return false
+                    val zoomState = cam.cameraInfo.zoomState.value ?: return false
+                    val newRatio = (currentZoomRatio * detector.scaleFactor)
+                        .coerceIn(zoomState.minZoomRatio, zoomState.maxZoomRatio)
+                    currentZoomRatio = newRatio
+                    cam.cameraControl.setZoomRatio(newRatio)
+                    showZoomBadge(newRatio)
+                    return true
+                }
+            })
+
+        // Tap-to-focus + double-tap reset
+        gestureDetector = GestureDetector(requireContext(),
+            object : GestureDetector.SimpleOnGestureListener() {
+                override fun onSingleTapUp(e: MotionEvent): Boolean {
+                    val cam = camera ?: return false
+                    val factory = SurfaceOrientedMeteringPointFactory(
+                        previewView.width.toFloat(), previewView.height.toFloat()
+                    )
+                    val point = factory.createPoint(e.x, e.y)
+                    val action = FocusMeteringAction.Builder(point).build()
+                    cam.cameraControl.startFocusAndMetering(action)
+                    return true
+                }
+
+                override fun onDoubleTap(e: MotionEvent): Boolean {
+                    val cam = camera ?: return false
+                    currentZoomRatio = 1f
+                    cam.cameraControl.setZoomRatio(1f)
+                    showZoomBadge(1f)
+                    return true
+                }
+            })
+
+        previewView.setOnTouchListener { v, event ->
+            var consumed = scaleGestureDetector?.onTouchEvent(event) ?: false
+            consumed = gestureDetector?.onTouchEvent(event) ?: false || consumed
+            if (!consumed) v.performClick()
+            true
+        }
+    }
+
+    private fun showZoomBadge(zoom: Float) {
+        if (_binding == null) return
+        val badge = binding.zoomLevel
+        badge.text = String.format(Locale.US, "%.1f×", zoom)
+        badge.visibility = View.VISIBLE
+        badge.removeCallbacks(hideBadgeRunnable)
+        badge.postDelayed(hideBadgeRunnable, 1500)
+    }
+
+    private val hideBadgeRunnable = Runnable {
+        if (_binding != null) binding.zoomLevel.visibility = View.GONE
     }
 
     private fun angleFromNormX(x: Float, hFov:Double): Double {
@@ -800,6 +873,10 @@ class VtuberPCFragment : Fragment(), FaceLandmarkerHelper.LandmarkerListener {
 
             // Attach the viewfinder's surface provider to preview use case
             preview?.surfaceProvider = binding.viewFinder.surfaceProvider
+
+            // Reset zoom when camera switches and wire up gesture detectors
+            currentZoomRatio = 1f
+            setupCameraGestures()
         } catch (exc: Exception) {
             Log.e(TAG, "Use case binding failed", exc)
         }
